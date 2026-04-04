@@ -101,3 +101,11 @@ export function clearLocalData(): void {
   localStorage.removeItem(SELECTED_ACCOUNT_KEY);
   localStorage.removeItem(SETTINGS_KEY);
 }
+
+export function calcCurrentInterest(amount: number, rate: number, createdAt: string): number {
+  const start = new Date(createdAt).getTime();
+  const now = Date.now();
+  const diffDays = Math.max(0, Math.floor((now - start) / (1000 * 60 * 60 * 24)));
+  const interest = amount * (rate / 100) * (diffDays / 365);
+  return Number(interest.toFixed(2));
+}
