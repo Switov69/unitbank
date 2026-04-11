@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, Landmark, Check, AlertCircle, ChevronRight, Wallet, Clock } from 'lucide-react';
 import { User, Credit, BankAccount } from '../types';
 import { getCredits, requestCredit, repayCredit, getAccounts } from '../api';
-import { formatAmount, formatShortDate, getSettings, calcCurrentInterest } from '../store';
+import { formatAmount, formatShortDate, getSettings } from '../store';
+import { calcCurrentInterest } from '../api';
 import { hapticNotification } from '../tma';
 
 interface CreditsPageProps {
