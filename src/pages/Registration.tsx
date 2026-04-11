@@ -115,7 +115,7 @@ export default function Registration({ onComplete }: RegistrationProps) {
       }, 1500);
     } catch (e: unknown) {
       const msg = (e as Error).message || 'Ошибка регистрации';
-      setPinError(`${msg} — повторите ввод`);
+      setPinError(msg + ' — ' + new Date().toLocaleTimeString());
     } finally {
       setLoading(false);
     }
