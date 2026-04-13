@@ -21,18 +21,22 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 export async function getUserByTelegramId(telegramId: number): Promise<User | null> {
   try {
-    return await apiFetch<User>(`/users/by-telegram/${telegramId}`);
+    return await apiFetch<User>(`/lookup?telegramId=${telegramId}`);
   } catch {
     return null;
   }
 }
 
-export async function createUser(
-  nickname: string,
-  pin: string,
-  telegramId: number | null,
-  telegramFirstName: string
-): Promise<User> {
+export async function checkNicknameExists(nickname: string): Promise<boolean> {
+  try {
+    await apiFetch(`/lookup?nickname=${encodeURIComponent(nickname)}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function createUser(nickname: string, pin: string, telegramId: number | null, telegramFirstName: string): Promise<User> {
   return apiFetch<User>('/users', {
     method: 'POST',
     body: JSON.stringify({ nickname, pin, telegramId, telegramFirstName }),
@@ -40,10 +44,7 @@ export async function createUser(
 }
 
 export async function updateUserPin(userId: string, pin: string): Promise<void> {
-  await apiFetch(`/users/${userId}/pin`, {
-    method: 'PUT',
-    body: JSON.stringify({ pin }),
-  });
+  await apiFetch(`/users/${userId}`, { method: 'PUT', body: JSON.stringify({ pin }) });
 }
 
 export async function deleteUser(userId: string): Promise<void> {
@@ -54,11 +55,7 @@ export async function getAccounts(userId: string): Promise<BankAccount[]> {
   return apiFetch<BankAccount[]>(`/accounts?userId=${encodeURIComponent(userId)}`);
 }
 
-export async function createAccount(
-  userId: string,
-  name: string,
-  color: string
-): Promise<BankAccount> {
+export async function createAccount(userId: string, name: string, color: string): Promise<BankAccount> {
   return apiFetch<BankAccount>('/accounts', {
     method: 'POST',
     body: JSON.stringify({ userId, name, color }),
@@ -67,16 +64,7 @@ export async function createAccount(
 
 export async function checkAccountExists(name: string): Promise<boolean> {
   try {
-    await apiFetch(`/accounts/exists/${encodeURIComponent(name)}`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function checkNicknameExists(nickname: string): Promise<boolean> {
-  try {
-    await apiFetch(`/users/nickname/${encodeURIComponent(nickname)}`);
+    await apiFetch(`/accounts?exists=${encodeURIComponent(name)}`);
     return true;
   } catch {
     return false;
@@ -87,16 +75,9 @@ export async function getTransactions(accountId: string): Promise<Transaction[]>
   return apiFetch<Transaction[]>(`/transactions?accountId=${encodeURIComponent(accountId)}`);
 }
 
-export async function transfer(
-  fromAccountId: string,
-  toAccountName: string,
-  amount: number
-): Promise<{ success: boolean; error?: string }> {
+export async function transfer(fromAccountId: string, toAccountName: string, amount: number): Promise<{ success: boolean; error?: string }> {
   try {
-    await apiFetch('/transfer', {
-      method: 'POST',
-      body: JSON.stringify({ fromAccountId, toAccountName, amount }),
-    });
+    await apiFetch('/transfer', { method: 'POST', body: JSON.stringify({ fromAccountId, toAccountName, amount }) });
     return { success: true };
   } catch (e: unknown) {
     return { success: false, error: (e as Error).message };
@@ -107,25 +88,16 @@ export async function getCredits(userId: string): Promise<Credit[]> {
   return apiFetch<Credit[]>(`/credits?userId=${encodeURIComponent(userId)}`);
 }
 
-export async function requestCredit(
-  userId: string,
-  accountId: string,
-  amount: number,
-  purpose: string
-): Promise<Credit> {
-  return apiFetch<Credit>('/credits/request', {
+export async function requestCredit(userId: string, accountId: string, amount: number, purpose: string): Promise<Credit> {
+  return apiFetch<Credit>('/credits', {
     method: 'POST',
     body: JSON.stringify({ userId, accountId, amount, purpose }),
   });
 }
 
-export async function repayCredit(
-  creditId: string,
-  amount: number,
-  fromAccountId: string
-): Promise<{ success: boolean; error?: string }> {
+export async function repayCredit(creditId: string, amount: number, fromAccountId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    await apiFetch(`/credits/${encodeURIComponent(creditId)}/repay`, {
+    await apiFetch(`/credits/${encodeURIComponent(creditId)}?action=repay`, {
       method: 'POST',
       body: JSON.stringify({ amount, fromAccountId }),
     });
