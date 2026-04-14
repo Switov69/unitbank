@@ -75,17 +75,12 @@ export default async function handler(req, res) {
       return fail(res, 400, 'Provide telegramId or nickname');
     }
 
-    // POST /users
     if (route === 'users' && method === 'POST') {
       const { nickname, pin, telegramId, telegramFirstName } = req.body;
       if (!nickname || !pin) return fail(res, 400, 'Не все поля заполнены');
       if (telegramId) {
         const { rows: ex } = await pool.query('SELECT * FROM users WHERE telegram_id=$1', [telegramId]);
-        if (ex[0]) {
-          if (ex[0].pin !== '' && !ex[0].nickname.startsWith('tg_')) return fail(res, 409, 'Аккаунт с этим Telegram уже зарегистрирован');
-          const { rows } = await pool.query('UPDATE users SET nickname=$1,pin=$2,telegram_first_name=$3 WHERE telegram_id=$4 RETURNING *', [nickname, pin, telegramFirstName || '', telegramId]);
-          return created(res, rowToUser(rows[0]));
-        }
+        if (ex[0]) return fail(res, 409, 'Аккаунт с этим Telegram уже зарегистрирован');
       }
       const { rows: nc } = await pool.query('SELECT id FROM users WHERE LOWER(nickname)=LOWER($1)', [nickname]);
       if (nc[0]) return fail(res, 409, 'Никнейм уже занят');
@@ -297,8 +292,8 @@ export default async function handler(req, res) {
         const text = msg.text || '';
         const firstName = msg.from?.first_name || 'Игрок';
         if (msg.from?.id) {
-          await pool.query(`INSERT INTO users (id,nickname,pin,telegram_id,telegram_first_name) VALUES ($1,$2,'',$3,$4) ON CONFLICT (telegram_id) DO UPDATE SET telegram_first_name=EXCLUDED.telegram_first_name`,
-            [genId(), `tg_${msg.from.id}`, msg.from.id, firstName]).catch(() => {});
+          await pool.query(`INSERT INTO tg_sessions (telegram_id, first_name) VALUES ($1,$2) ON CONFLICT (telegram_id) DO UPDATE SET first_name=EXCLUDED.first_name`,
+            [msg.from.id, firstName]).catch(() => {});
         }
         if (text === '/start') {
           await tgSend(chatId, `👋 Привет, <b>${firstName}</b>!\n\n🏦 <b>UnitBank</b> — виртуальный банк для Minecraft-сервера.\n\n💳 Управляй счетами\n💰 Переводи CBC\n📋 Оформляй кредиты\n\nНажми кнопку ниже 👇`,
