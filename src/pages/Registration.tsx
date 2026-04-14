@@ -289,7 +289,7 @@ export default function Registration({ onComplete }: RegistrationProps) {
 
         <button
           onClick={() => goNext('pin')}
-          className="mt-auto bg-primary text-white px-8 py-3.5 rounded-full font-semibold
+          className="mt-8 bg-primary text-white px-8 py-3.5 rounded-full font-semibold
             flex items-center justify-center gap-2 self-end
             shadow-lg shadow-primary/30 active:scale-95 transition-transform"
         >

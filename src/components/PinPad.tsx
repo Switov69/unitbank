@@ -39,8 +39,10 @@ export default function PinPad({
   useEffect(() => {
     if (pin.length === pinLength) {
       const captured = pin;
-      setPin('');
-      const t = setTimeout(() => onComplete(captured), 150);
+      const t = setTimeout(() => {
+        setPin('');
+        onComplete(captured);
+      }, 200);
       return () => clearTimeout(t);
     }
   }, [pin, pinLength, onComplete]);
