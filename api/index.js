@@ -10,7 +10,9 @@ function getPool() {
 function genId() { return Date.now().toString(36) + Math.random().toString(36).substring(2, 11); }
 function fmt(n) { return Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-function rowToUser(r) { return { id: r.id, nickname: r.nickname, telegramId: r.telegram_id ? Number(r.telegram_id) : null, telegramFirstName: r.telegram_first_name || '', pin: r.pin, createdAt: r.created_at }; }
+function rowToUser(r) {
+  return { id: r.id, nickname: r.nickname, telegramId: r.telegram_id ? Number(r.telegram_id) : null, telegramFirstName: r.telegram_first_name || '', pin: r.pin, isPremium: !!r.is_premium, premiumUntil: r.premium_until || null, createdAt: r.created_at };
+}
 function rowToAccount(r) { return { id: r.id, userId: r.user_id, name: r.name, balance: parseFloat(r.balance), color: r.color || '#4285f4', createdAt: r.created_at }; }
 function rowToTransaction(r) { return { id: r.id, accountId: r.account_id, type: r.type, amount: parseFloat(r.amount), description: r.description, createdAt: r.created_at }; }
 function rowToCredit(r) { return { id: r.id, userId: r.user_id, targetAccountId: r.target_account_id, amount: parseFloat(r.amount), paidAmount: parseFloat(r.paid_amount), interestSent: parseFloat(r.interest_sent), interestRate: parseFloat(r.interest_rate), purpose: r.purpose || '', status: r.status, createdAt: r.created_at }; }
@@ -48,9 +50,8 @@ function created(res, data) { res.status(201).json(data); }
 function fail(res, status, error) { res.status(status).json({ error }); }
 
 function getRoute(req) {
-  const url = new URL(req.url, `http://localhost`);
-  const path = url.pathname.replace(/^\/api\/?/, '').replace(/\/$/, '');
-  return path;
+  const url = new URL(req.url, 'http://localhost');
+  return url.pathname.replace(/^\/api\/?/, '').replace(/\/$/, '');
 }
 
 export default async function handler(req, res) {
@@ -59,7 +60,6 @@ export default async function handler(req, res) {
   const pool = getPool();
 
   try {
-    // GET /lookup?telegramId= or ?nickname=
     if (route === 'lookup' && method === 'GET') {
       const { telegramId, nickname } = req.query;
       if (telegramId) {
@@ -93,21 +93,35 @@ export default async function handler(req, res) {
       }
     }
 
-    // DELETE or PUT /users/:id
     const usersMatch = route.match(/^users\/([^/]+)$/);
     if (usersMatch) {
       const id = usersMatch[1];
-      if (method === 'DELETE') {
-        await pool.query('DELETE FROM users WHERE id=$1', [id]);
-        return ok(res, { success: true });
-      }
-      if (method === 'PUT') {
-        await pool.query('UPDATE users SET pin=$1 WHERE id=$2', [req.body.pin, id]);
-        return ok(res, { success: true });
-      }
+      if (method === 'DELETE') { await pool.query('DELETE FROM users WHERE id=$1', [id]); return ok(res, { success: true }); }
+      if (method === 'PUT') { await pool.query('UPDATE users SET pin=$1 WHERE id=$2', [req.body.pin, id]); return ok(res, { success: true }); }
     }
 
-    // GET /accounts?userId= or ?exists=   POST /accounts
+    if (route === 'premium' && method === 'POST') {
+      const { userId } = req.body;
+      const { rows: accRows } = await pool.query('SELECT * FROM accounts WHERE user_id=$1 ORDER BY balance DESC LIMIT 1', [userId]);
+      if (!accRows[0] || parseFloat(accRows[0].balance) < 2.5) return fail(res, 400, 'Недостаточно средств (нужно 2.5 CBC)');
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('UPDATE accounts SET balance=balance-2.5 WHERE id=$1', [accRows[0].id]);
+        await addTx(client, accRows[0].id, 'expense', 2.5, 'Подписка UnitBank Premium — 1 месяц');
+        const { rows: bankRows } = await client.query("SELECT id FROM accounts WHERE name='ub-unitbank'");
+        if (bankRows[0]) {
+          await client.query('UPDATE accounts SET balance=balance+2.5 WHERE id=$1', [bankRows[0].id]);
+          await addTx(client, bankRows[0].id, 'income', 2.5, `Продажа Premium: ${userId}`);
+        }
+        const premiumUntil = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+        const { rows } = await client.query('UPDATE users SET is_premium=true, premium_until=$1 WHERE id=$2 RETURNING *', [premiumUntil, userId]);
+        await client.query('COMMIT');
+        return ok(res, rowToUser(rows[0]));
+      } catch (e) { await client.query('ROLLBACK'); return fail(res, 500, e.message); }
+      finally { client.release(); }
+    }
+
     if (route === 'accounts') {
       if (method === 'GET') {
         const { userId, exists } = req.query;
@@ -124,8 +138,10 @@ export default async function handler(req, res) {
       if (method === 'POST') {
         const { userId, name, color } = req.body;
         if (!userId || !name) return fail(res, 400, 'userId and name required');
+        const { rows: uRows } = await pool.query('SELECT is_premium FROM users WHERE id=$1', [userId]);
+        const maxAcc = uRows[0]?.is_premium ? 5 : 2;
         const { rows: ex } = await pool.query('SELECT id FROM accounts WHERE user_id=$1', [userId]);
-        if (ex.length >= 2) return fail(res, 400, 'Максимум 2 счёта');
+        if (ex.length >= maxAcc) return fail(res, 400, `Максимум ${maxAcc} счетов`);
         try {
           const { rows } = await pool.query('INSERT INTO accounts (id,user_id,name,balance,color) VALUES ($1,$2,$3,0,$4) RETURNING *', [genId(), userId, name, color || '#4285f4']);
           return created(res, rowToAccount(rows[0]));
@@ -136,7 +152,42 @@ export default async function handler(req, res) {
       }
     }
 
-    // GET /transactions?accountId=
+    const accountMatch = route.match(/^accounts\/([^/]+)$/);
+    if (accountMatch) {
+      const accountId = accountMatch[1];
+      if (method === 'PUT') {
+        const { name, color } = req.body;
+        try {
+          const { rows } = await pool.query('UPDATE accounts SET name=$1, color=$2 WHERE id=$3 RETURNING *', [name, color, accountId]);
+          if (!rows[0]) return fail(res, 404, 'Счёт не найден');
+          return ok(res, rowToAccount(rows[0]));
+        } catch (e) {
+          if (e.code === '23505') return fail(res, 409, 'Счёт с таким именем уже существует');
+          return fail(res, 500, e.message);
+        }
+      }
+      if (method === 'DELETE') {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const { rows: accRows } = await client.query('SELECT * FROM accounts WHERE id=$1', [accountId]);
+          if (!accRows[0]) { await client.query('ROLLBACK'); return fail(res, 404, 'Счёт не найден'); }
+          const acc = rowToAccount(accRows[0]);
+          const { rows: otherAccs } = await client.query('SELECT * FROM accounts WHERE user_id=$1 AND id!=$2', [acc.userId, accountId]);
+          if (otherAccs.length === 0) { await client.query('ROLLBACK'); return fail(res, 400, 'Нельзя удалить единственный счёт'); }
+          if (acc.balance > 0) {
+            const target = rowToAccount(otherAccs[0]);
+            await client.query('UPDATE accounts SET balance=balance+$1 WHERE id=$2', [acc.balance, target.id]);
+            await addTx(client, target.id, 'income', acc.balance, `Перевод при закрытии счёта ${acc.name}`);
+          }
+          await client.query('DELETE FROM accounts WHERE id=$1', [accountId]);
+          await client.query('COMMIT');
+          return ok(res, { success: true });
+        } catch (e) { await client.query('ROLLBACK'); return fail(res, 500, e.message); }
+        finally { client.release(); }
+      }
+    }
+
     if (route === 'transactions' && method === 'GET') {
       const { accountId } = req.query;
       if (!accountId) return fail(res, 400, 'accountId required');
@@ -144,7 +195,6 @@ export default async function handler(req, res) {
       return ok(res, rows.map(rowToTransaction));
     }
 
-    // POST /transfer
     if (route === 'transfer' && method === 'POST') {
       const { fromAccountId, toAccountName, amount } = req.body;
       const rounded = Math.round(amount * 100) / 100;
@@ -172,7 +222,6 @@ export default async function handler(req, res) {
       finally { client.release(); }
     }
 
-    // GET /credits?userId=   POST /credits
     if (route === 'credits') {
       if (method === 'GET') {
         const { userId } = req.query;
@@ -186,14 +235,16 @@ export default async function handler(req, res) {
         if (!userId || !accountId || rounded <= 0) return fail(res, 400, 'Некорректные данные');
         const { rows: ar } = await pool.query("SELECT COALESCE(SUM(amount-paid_amount),0) as debt FROM credits WHERE user_id=$1 AND status='active'", [userId]);
         if (parseFloat(ar[0].debt) + rounded > 50) return fail(res, 400, 'Превышен кредитный лимит (50 CBC)');
+        const { rows: uRows } = await pool.query('SELECT is_premium FROM users WHERE id=$1', [userId]);
+        const interestRate = uRows[0]?.is_premium ? 0.01 : 0.02;
         const id = genId();
-        const { rows } = await pool.query("INSERT INTO credits (id,user_id,target_account_id,amount,paid_amount,interest_sent,interest_rate,purpose,status) VALUES ($1,$2,$3,$4,0,0,0.02,$5,'pending') RETURNING *", [id, userId, accountId, rounded, purpose || '']);
+        const { rows } = await pool.query("INSERT INTO credits (id,user_id,target_account_id,amount,paid_amount,interest_sent,interest_rate,purpose,status) VALUES ($1,$2,$3,$4,0,0,$5,$6,'pending') RETURNING *", [id, userId, accountId, rounded, interestRate, purpose || '']);
         const credit = rowToCredit(rows[0]);
-        const { rows: uRows } = await pool.query('SELECT nickname,telegram_id FROM users WHERE id=$1', [userId]);
+        const { rows: userRows } = await pool.query('SELECT nickname,telegram_id FROM users WHERE id=$1', [userId]);
         const { rows: aRows } = await pool.query('SELECT name FROM accounts WHERE id=$1', [accountId]);
         const adminId = process.env.ADMIN_TELEGRAM_ID;
         if (adminId) {
-          tgSend(adminId, `🏦 <b>Заявка на кредит</b>\n\nИгрок: <b>${uRows[0]?.nickname || userId}</b>\nTG: ${uRows[0]?.telegram_id || '—'}\nСумма: <b>${fmt(rounded)} CBC</b>\nСчёт: <code>${aRows[0]?.name || accountId}</code>\nЦель: ${purpose || '—'}`, {
+          tgSend(adminId, `🏦 <b>Заявка на кредит</b>\n\nИгрок: <b>${userRows[0]?.nickname || userId}</b>\nTG: ${userRows[0]?.telegram_id || '—'}\nСумма: <b>${fmt(rounded)} CBC</b>\nСчёт: <code>${aRows[0]?.name || accountId}</code>\nЦель: ${purpose || '—'}\nСтавка: ${interestRate * 100}%/нед`, {
             reply_markup: { inline_keyboard: [[{ text: '✅ Одобрить', callback_data: `approve:${credit.id}` }, { text: '❌ Отклонить', callback_data: `reject:${credit.id}` }]] },
           });
         }
@@ -201,7 +252,6 @@ export default async function handler(req, res) {
       }
     }
 
-    // POST /credits/:id?action=approve|reject|repay
     const creditsMatch = route.match(/^credits\/([^/]+)$/);
     if (creditsMatch && method === 'POST') {
       const creditId = creditsMatch[1];
@@ -219,7 +269,7 @@ export default async function handler(req, res) {
           await addTx(client, credit.target_account_id, 'credit', parseFloat(credit.amount), `Кредит одобрен: +${fmt(credit.amount)} CBC`);
           await client.query('COMMIT');
           const { rows: uRows } = await pool.query('SELECT telegram_id FROM users WHERE id=$1', [credit.user_id]);
-          if (uRows[0]?.telegram_id) tgSend(uRows[0].telegram_id, `✅ <b>Кредит одобрен!</b>\n\nСумма: <b>${fmt(credit.amount)} CBC</b>\nЗачислена на счёт.\n\n📌 Ставка: 2% в неделю.`);
+          if (uRows[0]?.telegram_id) tgSend(uRows[0].telegram_id, `✅ <b>Кредит одобрен!</b>\n\nСумма: <b>${fmt(credit.amount)} CBC</b>\nЗачислена на счёт.\n\n📌 Ставка: ${parseFloat(credit.interest_rate) * 100}% в неделю.`);
           return ok(res, { success: true });
         } catch (e) { await client.query('ROLLBACK'); return fail(res, 500, e.message); }
         finally { client.release(); }
@@ -281,7 +331,6 @@ export default async function handler(req, res) {
       }
     }
 
-    // POST /bot  (Telegram webhook)
     if (route === 'bot' && method === 'POST') {
       const update = req.body;
       const WEBAPP_URL = process.env.WEBAPP_URL || '';
@@ -292,19 +341,17 @@ export default async function handler(req, res) {
         const text = msg.text || '';
         const firstName = msg.from?.first_name || 'Игрок';
         if (msg.from?.id) {
-          await pool.query(`INSERT INTO tg_sessions (telegram_id, first_name) VALUES ($1,$2) ON CONFLICT (telegram_id) DO UPDATE SET first_name=EXCLUDED.first_name`,
-            [msg.from.id, firstName]).catch(() => {});
+          await pool.query(`INSERT INTO tg_sessions (telegram_id,first_name) VALUES ($1,$2) ON CONFLICT (telegram_id) DO UPDATE SET first_name=EXCLUDED.first_name`, [msg.from.id, firstName]).catch(() => {});
         }
         if (text === '/start') {
           await tgSend(chatId, `👋 Привет, <b>${firstName}</b>!\n\n🏦 <b>UnitBank</b> — виртуальный банк для Minecraft-сервера.\n\n💳 Управляй счетами\n💰 Переводи CBC\n📋 Оформляй кредиты\n\nНажми кнопку ниже 👇`,
             { reply_markup: { inline_keyboard: [[{ text: '🏦 Открыть UnitBank', web_app: { url: WEBAPP_URL } }]] } });
         } else if (text === '/help') {
-          await tgSend(chatId, `ℹ️ <b>Помощь по UnitBank</b>\n\n<b>Счета</b>\n• Максимум 2 счёта\n• Формат: <code>ub-название</code>\n\n<b>Кредиты</b>\n• Максимум 50 CBC\n• Ставка: 2% в неделю\n• Требуют одобрения\n\n/start /balance /help`);
+          await tgSend(chatId, `ℹ️ <b>Помощь по UnitBank</b>\n\n<b>Счета</b>\n• Обычный: до 2 счетов\n• Premium: до 5 счетов\n\n<b>Кредиты</b>\n• Максимум 50 CBC\n• Обычный: 2%/нед, Premium: 1%/нед\n• Требуют одобрения\n\n/start /balance /help`);
         } else if (text === '/balance') {
           const { rows } = await pool.query(`SELECT a.name,a.balance FROM accounts a JOIN users u ON u.id=a.user_id WHERE u.telegram_id=$1 ORDER BY a.created_at`, [chatId]);
           if (!rows.length) {
-            await tgSend(chatId, '💳 Счета не найдены. Откройте UnitBank для регистрации.',
-              { reply_markup: { inline_keyboard: [[{ text: '🏦 Открыть UnitBank', web_app: { url: WEBAPP_URL } }]] } });
+            await tgSend(chatId, '💳 Счета не найдены. Откройте UnitBank для регистрации.', { reply_markup: { inline_keyboard: [[{ text: '🏦 Открыть UnitBank', web_app: { url: WEBAPP_URL } }]] } });
           } else {
             await tgSend(chatId, `💳 <b>Ваши счета</b>\n\n${rows.map(r => `• <code>${r.name}</code>: <b>${fmt(r.balance)} CBC</b>`).join('\n')}`);
           }
@@ -317,10 +364,7 @@ export default async function handler(req, res) {
         const messageId = query.message?.message_id;
         const data = query.data || '';
         const adminId = process.env.ADMIN_TELEGRAM_ID;
-        if (!adminId || String(chatId) !== String(adminId)) {
-          await tgAnswer(query.id, '⛔ Нет доступа');
-          return ok(res, { ok: true });
-        }
+        if (!adminId || String(chatId) !== String(adminId)) { await tgAnswer(query.id, '⛔ Нет доступа'); return ok(res, { ok: true }); }
         const [action, creditId] = data.split(':');
         if (!creditId) { await tgAnswer(query.id, ''); return ok(res, { ok: true }); }
 
@@ -336,7 +380,7 @@ export default async function handler(req, res) {
             await addTx(client, credit.target_account_id, 'credit', parseFloat(credit.amount), `Кредит одобрен: +${fmt(credit.amount)} CBC`);
             await client.query('COMMIT');
             const { rows: uRows } = await pool.query('SELECT telegram_id FROM users WHERE id=$1', [credit.user_id]);
-            if (uRows[0]?.telegram_id) tgSend(uRows[0].telegram_id, `✅ <b>Кредит одобрен!</b>\n\nСумма: <b>${fmt(credit.amount)} CBC</b>\nЗачислена на счёт.\n\n📌 Ставка: 2% в неделю.`);
+            if (uRows[0]?.telegram_id) tgSend(uRows[0].telegram_id, `✅ <b>Кредит одобрен!</b>\n\nСумма: <b>${fmt(credit.amount)} CBC</b>\nЗачислена на счёт.\n\n📌 Ставка: ${parseFloat(credit.interest_rate) * 100}% в неделю.`);
             await tgEdit(chatId, messageId, query.message.text + '\n\n✅ <b>Одобрено</b>');
             await tgAnswer(query.id, '✅ Одобрено');
           } catch (e) { await client.query('ROLLBACK'); await tgAnswer(query.id, `Ошибка: ${e.message}`); }

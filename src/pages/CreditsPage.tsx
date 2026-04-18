@@ -181,7 +181,7 @@ export default function CreditsPage({ user, refreshKey, onRefresh }: CreditsPage
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="bg-white rounded-3xl p-5 border border-outline/20">
+            <div className="bg-surface rounded-3xl p-5 border border-outline/20">
               <div className="flex justify-between mb-2">
                 <span className="text-sm text-on-surface-variant">Основной долг</span>
                 <span className={`text-sm font-medium ${incognitoMode ? 'blur-sm select-none' : ''}`}>
@@ -209,7 +209,7 @@ export default function CreditsPage({ user, refreshKey, onRefresh }: CreditsPage
               <select
                 value={selectedAccountId}
                 onChange={(e) => setSelectedAccountId(e.target.value)}
-                className="w-full bg-white border-2 border-outline/50 rounded-2xl px-4 py-3.5 text-base
+                className="w-full bg-surface border-2 border-outline/50 rounded-2xl px-4 py-3.5 text-base
                   text-on-surface focus:border-primary focus:outline-none transition-colors appearance-none"
               >
                 {accounts.map((acc) => (
@@ -234,7 +234,7 @@ export default function CreditsPage({ user, refreshKey, onRefresh }: CreditsPage
                 placeholder="0.00"
                 min="0"
                 step="0.01"
-                className="w-full bg-white border-2 border-outline/50 rounded-2xl px-4 py-3.5 text-base
+                className="w-full bg-surface border-2 border-outline/50 rounded-2xl px-4 py-3.5 text-base
                   text-on-surface placeholder:text-on-surface-variant/50
                   focus:border-primary focus:outline-none transition-colors"
               />
@@ -303,7 +303,7 @@ export default function CreditsPage({ user, refreshKey, onRefresh }: CreditsPage
             <select
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="w-full bg-white border-2 border-outline/50 rounded-2xl px-4 py-3.5 text-base
+              className="w-full bg-surface border-2 border-outline/50 rounded-2xl px-4 py-3.5 text-base
                 text-on-surface focus:border-primary focus:outline-none transition-colors appearance-none"
             >
               {accounts.map((acc) => (
@@ -329,7 +329,7 @@ export default function CreditsPage({ user, refreshKey, onRefresh }: CreditsPage
               min="0"
               max={available}
               step="0.01"
-              className="w-full bg-white border-2 border-outline/50 rounded-2xl px-4 py-3.5 text-base
+              className="w-full bg-surface border-2 border-outline/50 rounded-2xl px-4 py-3.5 text-base
                 text-on-surface placeholder:text-on-surface-variant/50
                 focus:border-primary focus:outline-none transition-colors"
             />
@@ -351,7 +351,7 @@ export default function CreditsPage({ user, refreshKey, onRefresh }: CreditsPage
               }}
               placeholder="Например: покупка ресурсов"
               maxLength={100}
-              className="w-full bg-white border-2 border-outline/50 rounded-2xl px-4 py-3.5 text-base
+              className="w-full bg-surface border-2 border-outline/50 rounded-2xl px-4 py-3.5 text-base
                 text-on-surface placeholder:text-on-surface-variant/50
                 focus:border-primary focus:outline-none transition-colors"
             />
@@ -377,7 +377,7 @@ export default function CreditsPage({ user, refreshKey, onRefresh }: CreditsPage
     <div className="px-4 pt-2 pb-24 animate-fade-in">
       <h1 className="text-2xl font-bold text-on-surface mb-4">Кредиты</h1>
 
-      <div className="bg-white rounded-3xl p-5 border border-outline/20 shadow-sm mb-5">
+      <div className="bg-surface rounded-3xl p-5 border border-outline/20 shadow-sm mb-5">
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-sm text-on-surface-variant">Общий долг</p>
@@ -434,7 +434,7 @@ export default function CreditsPage({ user, refreshKey, onRefresh }: CreditsPage
                 return (
                   <div
                     key={credit.id}
-                    className="bg-white rounded-2xl p-4 border border-outline/10 shadow-sm"
+                    className="bg-surface rounded-2xl p-4 border border-outline/10 shadow-sm"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
@@ -525,7 +525,7 @@ export default function CreditsPage({ user, refreshKey, onRefresh }: CreditsPage
       )}
 
       {credits.length === 0 && (
-        <div className="bg-white rounded-3xl p-8 text-center border border-outline/20">
+        <div className="bg-surface rounded-3xl p-8 text-center border border-outline/20">
           <p className="text-on-surface-variant text-sm">У вас пока нет кредитов</p>
           <p className="text-on-surface-variant/50 text-xs mt-1">
             Вы можете взять до {CREDIT_LIMIT} CBC под {INTEREST_RATE * 100}% в неделю

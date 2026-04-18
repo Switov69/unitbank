@@ -5,6 +5,7 @@ import {
   getSelectedAccountId,
   setSelectedAccountId as saveSelectedAccountId,
   clearLocalData,
+  applyTheme,
 } from './store';
 import { getUserByTelegramId, getAccounts } from './api';
 import { initTMA, getTelegramUser } from './tma';
@@ -32,15 +33,26 @@ export default function App() {
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
+    const settings = getSettings();
+    applyTheme(settings.theme);
+
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => {
+      const s = getSettings();
+      if (s.theme === 'system') applyTheme('system');
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  useEffect(() => {
     async function init() {
       initTMA();
       const tgUser = getTelegramUser();
-
       if (!tgUser) {
         setScreen('registration');
         return;
       }
-
       const existingUser = await getUserByTelegramId(tgUser.id);
       if (existingUser) {
         setUser(existingUser);
@@ -61,28 +73,21 @@ export default function App() {
     init();
   }, []);
 
-  const handleRegistrationComplete = useCallback(
-    (newUser: User, firstAccountId: string) => {
-      setUser(newUser);
-      setSelectedAccountId(firstAccountId);
-      saveSelectedAccountId(firstAccountId);
-      setScreen('main');
-    },
-    []
-  );
-
-  const handlePinSuccess = useCallback(() => {
+  const handleRegistrationComplete = useCallback((newUser: User, firstAccountId: string) => {
+    setUser(newUser);
+    setSelectedAccountId(firstAccountId);
+    saveSelectedAccountId(firstAccountId);
     setScreen('main');
   }, []);
+
+  const handlePinSuccess = useCallback(() => setScreen('main'), []);
 
   const handleSelectAccount = useCallback((id: string) => {
     setSelectedAccountId(id);
     saveSelectedAccountId(id);
   }, []);
 
-  const handleLogout = useCallback(() => {
-    setScreen('pin');
-  }, []);
+  const handleLogout = useCallback(() => setScreen('pin'), []);
 
   const handleDeleteAccount = useCallback(() => {
     clearLocalData();
@@ -91,15 +96,12 @@ export default function App() {
     setScreen('registration');
   }, []);
 
-  const handleNewAccountCreated = useCallback(
-    (accountId: string) => {
-      setSelectedAccountId(accountId);
-      saveSelectedAccountId(accountId);
-      setOverlay(null);
-      refresh();
-    },
-    [refresh]
-  );
+  const handleNewAccountCreated = useCallback((accountId: string) => {
+    setSelectedAccountId(accountId);
+    saveSelectedAccountId(accountId);
+    setOverlay(null);
+    refresh();
+  }, [refresh]);
 
   const handleTransferClose = useCallback(() => {
     setOverlay(null);
@@ -128,10 +130,7 @@ export default function App() {
   if (screen === 'pin' && user) {
     return (
       <div className="h-full bg-bg">
-        <PinEntry
-          user={user}
-          onSuccess={handlePinSuccess}
-        />
+        <PinEntry user={user} onSuccess={handlePinSuccess} />
       </div>
     );
   }
@@ -142,20 +141,17 @@ export default function App() {
         <div className="flex-1 overflow-y-auto pt-2" style={{ paddingBottom: '80px' }}>
           {tab === 'accounts' && (
             <AccountsPage
-              userId={user.id}
+              user={user}
               selectedAccountId={selectedAccountId}
               onSelectAccount={handleSelectAccount}
               onTransfer={() => setOverlay('transfer')}
               onNewAccount={() => setOverlay('new-account')}
               refreshKey={refreshKey}
+              onRefresh={refresh}
             />
           )}
           {tab === 'credits' && (
-            <CreditsPage
-              user={user}
-              refreshKey={refreshKey}
-              onRefresh={refresh}
-            />
+            <CreditsPage user={user} refreshKey={refreshKey} onRefresh={refresh} />
           )}
           {tab === 'settings' && (
             <SettingsPage
@@ -183,10 +179,8 @@ export default function App() {
           <div className="fixed inset-0 z-50 bg-bg">
             <NewAccountPage
               userId={user.id}
-              onClose={() => {
-                setOverlay(null);
-                refresh();
-              }}
+              isPremium={user.isPremium}
+              onClose={() => { setOverlay(null); refresh(); }}
               onCreated={handleNewAccountCreated}
             />
           </div>

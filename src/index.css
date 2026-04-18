@@ -18,6 +18,24 @@
   --color-warning-light: #fef7e0;
 }
 
+html.dark {
+  --color-primary: #5b9cf6;
+  --color-primary-dark: #4285f4;
+  --color-primary-light: #1a2744;
+  --color-primary-surface: #1e2d4f;
+  --color-surface: #1e1e21;
+  --color-bg: #111113;
+  --color-on-surface: #e8eaed;
+  --color-on-surface-variant: #9aa0a6;
+  --color-outline: #2d2d32;
+  --color-success: #34a853;
+  --color-success-light: #0d2f1a;
+  --color-error: #f28b82;
+  --color-error-light: #2c1210;
+  --color-warning: #fdd663;
+  --color-warning-light: #2c2000;
+}
+
 * {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-tap-highlight-color: transparent;
@@ -32,15 +50,13 @@ html, body, #root {
 }
 
 body {
-  background-color: #f8f9fa;
-  color: #202124;
+  background-color: var(--color-bg);
+  color: var(--color-on-surface);
   user-select: none;
   -webkit-user-select: none;
 }
 
-::-webkit-scrollbar {
-  display: none;
-}
+::-webkit-scrollbar { display: none; }
 
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
@@ -48,18 +64,11 @@ input[type="number"]::-webkit-outer-spin-button {
   margin: 0;
 }
 
-input[type="number"] {
-  -moz-appearance: textfield;
-}
+input[type="number"] { -moz-appearance: textfield; }
 
 @keyframes slideUp {
   from { transform: translateY(100%); opacity: 0.5; }
   to { transform: translateY(0); opacity: 1; }
-}
-
-@keyframes slideDown {
-  from { transform: translateY(0); opacity: 1; }
-  to { transform: translateY(100%); opacity: 0; }
 }
 
 @keyframes fadeIn {
@@ -78,32 +87,10 @@ input[type="number"] {
   40%, 80% { transform: translateX(6px); }
 }
 
-@keyframes pulse-dot {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.3); }
-}
+.animate-slide-up { animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+.animate-fade-in { animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.animate-scale-in { animation: scaleIn 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+.animate-shake { animation: shake 0.4s ease; }
 
-.animate-slide-up {
-  animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.animate-scale-in {
-  animation: scaleIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.animate-shake {
-  animation: shake 0.4s ease;
-}
-
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

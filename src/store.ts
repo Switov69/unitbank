@@ -1,8 +1,5 @@
 export function formatAmount(amount: number): string {
-  return amount.toLocaleString('ru-RU', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return amount.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function formatDate(dateStr: string): string {
@@ -15,22 +12,12 @@ export function formatDate(dateStr: string): string {
   const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   if (isToday) return `Сегодня, ${time}`;
   if (isYesterday) return `Вчера, ${time}`;
-  return (
-    date.toLocaleDateString('ru-RU', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }) + `, ${time}`
-  );
+  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) + `, ${time}`;
 }
 
 export function formatShortDate(dateStr: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export function getAvatarUrl(nickname: string, size: number = 100): string {
@@ -45,23 +32,32 @@ export function darkenHex(hex: string, amount = 40): string {
   return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
 }
 
+export type Theme = 'light' | 'dark' | 'system';
+
 export interface AppSettings {
   pinEnabled: boolean;
   incognitoMode: boolean;
+  theme: Theme;
 }
 
-const SETTINGS_KEY = 'unitbank_settings_v2';
+const SETTINGS_KEY = 'unitbank_settings_v3';
 
 export function getSettings(): AppSettings {
   try {
     const data = localStorage.getItem(SETTINGS_KEY);
-    if (data) return { pinEnabled: true, incognitoMode: false, ...JSON.parse(data) };
+    if (data) return { pinEnabled: true, incognitoMode: false, theme: 'system', ...JSON.parse(data) };
   } catch {}
-  return { pinEnabled: true, incognitoMode: false };
+  return { pinEnabled: true, incognitoMode: false, theme: 'system' };
 }
 
 export function saveSettings(settings: AppSettings): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+export function applyTheme(theme: Theme): void {
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark = theme === 'dark' || (theme === 'system' && prefersDark);
+  document.documentElement.classList.toggle('dark', isDark);
 }
 
 const LOCKOUT_KEY = 'unitbank_lockout_v2';

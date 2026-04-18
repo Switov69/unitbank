@@ -39,12 +39,24 @@ export async function deleteUser(userId: string): Promise<void> {
   await apiFetch(`users/${userId}`, { method: 'DELETE' });
 }
 
+export async function buyPremium(userId: string): Promise<User> {
+  return apiFetch<User>('premium', { method: 'POST', body: JSON.stringify({ userId }) });
+}
+
 export async function getAccounts(userId: string): Promise<BankAccount[]> {
   return apiFetch<BankAccount[]>(`accounts?userId=${encodeURIComponent(userId)}`);
 }
 
 export async function createAccount(userId: string, name: string, color: string): Promise<BankAccount> {
   return apiFetch<BankAccount>('accounts', { method: 'POST', body: JSON.stringify({ userId, name, color }) });
+}
+
+export async function updateAccount(accountId: string, name: string, color: string): Promise<BankAccount> {
+  return apiFetch<BankAccount>(`accounts/${encodeURIComponent(accountId)}`, { method: 'PUT', body: JSON.stringify({ name, color }) });
+}
+
+export async function deleteAccount(accountId: string): Promise<void> {
+  await apiFetch(`accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
 }
 
 export async function checkAccountExists(name: string): Promise<boolean> {

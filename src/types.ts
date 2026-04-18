@@ -4,6 +4,8 @@ export interface User {
   telegramId: number | null;
   telegramFirstName: string;
   pin: string;
+  isPremium: boolean;
+  premiumUntil: string | null;
   createdAt: string;
 }
 
