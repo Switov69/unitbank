@@ -146,11 +146,11 @@ export default function SettingsPage({ user, onLogout, onDeleteAccount, onUserUp
           <h1 className="text-xl font-bold text-on-surface">UnitBank Premium</h1>
         </div>
         <div className="px-4 space-y-4">
-          <div className="rounded-3xl p-6 text-white" style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' }}>
+          <div className="bg-surface rounded-3xl p-6 border border-warning/30">
             <div className="text-3xl mb-2">⭐</div>
-            <h2 className="text-xl font-bold mb-1">Premium</h2>
-            <p className="text-white/80 text-sm">Расширенные возможности UnitBank на 1 месяц</p>
-            <p className="text-2xl font-extrabold mt-4">2.5 CBC <span className="text-sm font-normal text-white/70">/ месяц</span></p>
+            <h2 className="text-xl font-bold text-on-surface mb-1">Premium</h2>
+            <p className="text-on-surface-variant text-sm">Расширенные возможности UnitBank на 1 месяц</p>
+            <p className="text-2xl font-extrabold text-warning mt-4">2.5 CBC <span className="text-sm font-normal text-on-surface-variant">/ месяц</span></p>
           </div>
           <div className="bg-surface rounded-3xl p-5 border border-outline/20 space-y-3">
             {[
@@ -183,8 +183,7 @@ export default function SettingsPage({ user, onLogout, onDeleteAccount, onUserUp
               <button
                 onClick={handleBuyPremium}
                 disabled={premiumLoading}
-                className="w-full py-4 rounded-2xl font-semibold text-white active:scale-[0.98] transition-transform disabled:opacity-60"
-                style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' }}
+                className="w-full py-4 rounded-2xl font-semibold text-on-surface bg-warning-light active:scale-[0.98] transition-transform disabled:opacity-60"
               >
                 {premiumLoading ? 'Оформление...' : 'Оформить за 2.5 CBC'}
               </button>
@@ -224,7 +223,7 @@ export default function SettingsPage({ user, onLogout, onDeleteAccount, onUserUp
           </button>
           <h1 className="text-xl font-bold text-on-surface">Смена кода</h1>
         </div>
-        <PinPad title={titles[view].title} subtitle={titles[view].subtitle} pinLength={4} error={pinError} onComplete={handlers[view]} />
+        <PinPad compact={true} title={titles[view].title} subtitle={titles[view].subtitle} pinLength={4} error={pinError} onComplete={handlers[view]} />
       </div>
     );
   }
@@ -262,8 +261,8 @@ export default function SettingsPage({ user, onLogout, onDeleteAccount, onUserUp
           </div>
           <div className="h-px bg-outline/20 mx-5" />
           <button onClick={() => { hapticImpact('light'); setView('premium'); }} className="w-full flex items-center gap-4 px-5 py-4 active:bg-bg transition-colors">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, #fbbf24, #d97706)' }}>
-              <Star className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-warning-light rounded-xl flex items-center justify-center flex-shrink-0">
+              <Star className="w-5 h-5 text-warning" />
             </div>
             <div className="flex-1 text-left">
               <p className="text-sm font-medium text-on-surface">Premium подписка</p>

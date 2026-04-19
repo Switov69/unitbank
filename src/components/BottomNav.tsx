@@ -16,7 +16,7 @@ const tabs: { id: TabType; label: string; icon: typeof Wallet }[] = [
 export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg border-t border-outline/30 z-40"
+      className="fixed bottom-0 left-0 right-0 bg-surface backdrop-blur-lg border-t border-outline/30 z-40"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       <div className="flex items-center justify-around h-16 max-w-md mx-auto">

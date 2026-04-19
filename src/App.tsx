@@ -112,7 +112,7 @@ export default function App() {
     return (
       <div className="h-full flex items-center justify-center bg-bg">
         <div className="flex flex-col items-center animate-fade-in">
-          <img src={logo} alt="UnitBank" className="w-16 h-16 rounded-2xl shadow-lg shadow-primary/30 mb-4" />
+          <img src={logo} alt="UnitBank" className="w-16 h-16 rounded-2xl " />
           <p className="text-sm text-on-surface-variant">Загрузка...</p>
         </div>
       </div>

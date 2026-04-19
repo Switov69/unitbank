@@ -115,6 +115,7 @@ export default function PinEntry({ user, onSuccess }: PinEntryProps) {
         <div className="flex-1">
           <PinPad
             title="Введите код-пароль"
+            compact={true}
             pinLength={4}
             error={error}
             onComplete={handleComplete}

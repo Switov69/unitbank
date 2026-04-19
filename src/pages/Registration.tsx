@@ -82,14 +82,14 @@ export default function Registration({ onComplete }: RegistrationProps) {
   if (step === 'welcome') {
     return (
       <div className="flex flex-col items-center justify-center min-h-full px-6 animate-fade-in">
-        <img src={logo} alt="UnitBank" className="w-20 h-20 rounded-3xl shadow-lg shadow-primary/30 mb-6" />
+        <img src={logo} alt="UnitBank" className="w-20 h-20 rounded-3xl mb-6" />
         <h1 className="text-3xl font-bold text-on-surface mb-2">UnitBank</h1>
         <p className="text-on-surface-variant text-center text-sm mb-10 max-w-[260px]">
           Виртуальный банк для вашего Minecraft-сервера
         </p>
         <button
           onClick={() => goNext('nickname')}
-          className="bg-primary text-white px-10 py-3.5 rounded-full font-semibold text-base shadow-lg shadow-primary/30 active:scale-95 transition-transform"
+          className="bg-primary text-white px-10 py-3.5 rounded-full font-semibold text-base active:scale-95 transition-transform"
         >
           Создать аккаунт
         </button>
@@ -123,7 +123,7 @@ export default function Registration({ onComplete }: RegistrationProps) {
         <button
           onClick={handleNicknameSubmit}
           disabled={loading}
-          className="mt-8 bg-primary text-white px-8 py-3.5 rounded-full font-semibold flex items-center justify-center gap-2 self-end shadow-lg shadow-primary/30 active:scale-95 transition-transform disabled:opacity-60"
+          className="mt-8 bg-primary text-white px-8 py-3.5 rounded-full font-semibold flex items-center justify-center gap-2 self-end active:scale-95 transition-transform disabled:opacity-60"
         >
           {loading ? 'Проверка...' : <>Далее <ChevronRight className="w-5 h-5" /></>}
         </button>
@@ -158,7 +158,7 @@ export default function Registration({ onComplete }: RegistrationProps) {
         <button
           onClick={handleAccountSubmit}
           disabled={loading}
-          className="mt-8 bg-primary text-white px-8 py-3.5 rounded-full font-semibold flex items-center justify-center gap-2 self-end shadow-lg shadow-primary/30 active:scale-95 transition-transform disabled:opacity-60"
+          className="mt-8 bg-primary text-white px-8 py-3.5 rounded-full font-semibold flex items-center justify-center gap-2 self-end active:scale-95 transition-transform disabled:opacity-60"
         >
           {loading ? 'Проверка...' : <>Далее <ChevronRight className="w-5 h-5" /></>}
         </button>
@@ -193,7 +193,7 @@ export default function Registration({ onComplete }: RegistrationProps) {
         </div>
         <button
           onClick={() => goNext('pin')}
-          className="mt-8 bg-primary text-white px-8 py-3.5 rounded-full font-semibold flex items-center justify-center gap-2 self-end shadow-lg shadow-primary/30 active:scale-95 transition-transform"
+          className="mt-8 bg-primary text-white px-8 py-3.5 rounded-full font-semibold flex items-center justify-center gap-2 self-end active:scale-95 transition-transform"
         >
           Далее <ChevronRight className="w-5 h-5" />
         </button>

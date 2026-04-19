@@ -8,10 +8,11 @@ interface PinPadProps {
   pinLength?: number;
   error?: string;
   disabled?: boolean;
+  compact?: boolean;
   onComplete: (pin: string) => void;
 }
 
-export default function PinPad({ title, subtitle, pinLength = 4, error, disabled, onComplete }: PinPadProps) {
+export default function PinPad({ title, subtitle, pinLength = 4, error, disabled, compact = false, onComplete }: PinPadProps) {
   const [pin, setPin] = useState('');
   const [shaking, setShaking] = useState(false);
   const [lastError, setLastError] = useState('');
@@ -64,10 +65,17 @@ export default function PinPad({ title, subtitle, pinLength = 4, error, disabled
 
   const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'];
 
+  const dotSize = compact ? 'w-3.5 h-3.5' : 'w-4 h-4';
+  const gridMax = compact ? 'max-w-[248px]' : 'max-w-[300px]';
+  const textSize = compact ? 'text-xl' : 'text-2xl';
+  const gap = compact ? 'gap-2' : 'gap-3';
+  const titleSize = compact ? 'text-xl' : 'text-2xl';
+  const py = compact ? 'py-4' : 'py-6';
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-full px-6 py-4">
+    <div className={`flex flex-col items-center justify-center min-h-full px-6 ${py}`}>
       <div className="text-center mb-6">
-        <h1 className="text-xl font-bold text-on-surface">{title}</h1>
+        <h1 className={`${titleSize} font-bold text-on-surface`}>{title}</h1>
         {subtitle && <p className="text-sm text-on-surface-variant mt-1">{subtitle}</p>}
       </div>
 
@@ -75,18 +83,18 @@ export default function PinPad({ title, subtitle, pinLength = 4, error, disabled
         {Array.from({ length: pinLength }).map((_, i) => (
           <div
             key={i}
-            className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
+            className={`${dotSize} rounded-full transition-all duration-200 ${
               i < pin.length ? 'bg-primary scale-110' : 'bg-outline/40'
             }`}
           />
         ))}
       </div>
 
-      <div className="h-5 mb-4">
+      <div className="h-5 mb-5">
         {error && <p className="text-error text-xs font-medium animate-fade-in text-center">{error}</p>}
       </div>
 
-      <div className="grid grid-cols-3 gap-2 w-full max-w-[248px]">
+      <div className={`grid grid-cols-3 ${gap} w-full ${gridMax}`}>
         {digits.map((digit, i) => {
           if (digit === '') return <div key={i} />;
           if (digit === 'del') {
@@ -97,7 +105,7 @@ export default function PinPad({ title, subtitle, pinLength = 4, error, disabled
                 disabled={disabled}
                 className="aspect-square rounded-2xl flex items-center justify-center active:bg-outline/20 transition-colors disabled:opacity-40"
               >
-                <Delete className="w-5 h-5 text-on-surface-variant" />
+                <Delete className={`${compact ? 'w-5 h-5' : 'w-6 h-6'} text-on-surface-variant`} />
               </button>
             );
           }
@@ -106,10 +114,10 @@ export default function PinPad({ title, subtitle, pinLength = 4, error, disabled
               key={i}
               onClick={() => handleDigit(digit)}
               disabled={disabled}
-              className="aspect-square rounded-2xl bg-surface text-on-surface text-xl font-medium
-                shadow-sm border border-outline/30
+              className={`aspect-square rounded-2xl bg-surface text-on-surface ${textSize} font-medium
+                border border-outline/30
                 active:bg-primary-light active:border-primary/30 active:scale-95
-                transition-all duration-100 flex items-center justify-center disabled:opacity-40"
+                transition-all duration-100 flex items-center justify-center disabled:opacity-40`}
             >
               {digit}
             </button>

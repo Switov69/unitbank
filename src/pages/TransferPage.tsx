@@ -34,26 +34,36 @@ export default function TransferPage({ userId, selectedAccountId, onClose }: Tra
     if (isNaN(numAmount) || numAmount <= 0) { setError('Введите корректную сумму'); hapticNotification('error'); return; }
     if (!fromAccount || fromAccount.balance < numAmount) { setError('Недостаточно средств'); hapticNotification('error'); return; }
     setLoading(true);
-    const exists = await checkAccountExists(trimAccount);
-    setLoading(false);
-    if (!exists) { setError('Счёт получателя не найден'); hapticNotification('error'); return; }
-    setError('');
-    hapticImpact('medium');
-    setStep('confirm');
+    try {
+      const exists = await checkAccountExists(trimAccount);
+      if (!exists) { setError('Счёт получателя не найден'); hapticNotification('error'); return; }
+      setError('');
+      hapticImpact('medium');
+      setStep('confirm');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleConfirm = async () => {
     setLoading(true);
-    const result = await transfer(fromId, toAccount.trim(), parseFloat(amount));
-    setLoading(false);
-    if (result.success) {
-      hapticNotification('success');
-      setStep('success');
-      setTimeout(onClose, 1500);
-    } else {
-      setError(result.error || 'Ошибка перевода');
+    try {
+      const result = await transfer(fromId, toAccount.trim(), parseFloat(amount));
+      if (result.success) {
+        hapticNotification('success');
+        setStep('success');
+        setTimeout(onClose, 1500);
+      } else {
+        setError(result.error || 'Ошибка перевода');
+        hapticNotification('error');
+        setStep('form');
+      }
+    } catch {
+      setError('Ошибка перевода');
       hapticNotification('error');
       setStep('form');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -75,7 +85,7 @@ export default function TransferPage({ userId, selectedAccountId, onClose }: Tra
     return (
       <div className="min-h-full flex flex-col bg-bg animate-fade-in">
         <div className="flex items-center gap-3 px-4 pt-4 pb-2">
-          <button onClick={() => setStep('form')} className="w-10 h-10 rounded-xl flex items-center justify-center active:bg-outline/20">
+          <button onClick={() => { setStep('form'); setLoading(false); }} className="w-10 h-10 rounded-xl flex items-center justify-center active:bg-outline/20">
             <ArrowLeft className="w-5 h-5 text-on-surface" />
           </button>
           <h1 className="text-xl font-bold text-on-surface">Подтверждение</h1>
@@ -99,10 +109,11 @@ export default function TransferPage({ userId, selectedAccountId, onClose }: Tra
               </div>
             </div>
           </div>
+          {error && <p className="text-error text-sm font-medium mt-3 animate-fade-in">{error}</p>}
           <button
             onClick={handleConfirm}
             disabled={loading}
-            className="w-full mt-6 bg-primary text-white py-4 rounded-2xl font-semibold text-base shadow-lg shadow-primary/30 active:scale-[0.98] transition-transform flex items-center justify-center gap-2 disabled:opacity-60"
+            className="w-full mt-6 bg-primary text-white py-4 rounded-2xl font-semibold text-base active:scale-[0.98] transition-transform flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {loading
               ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -168,7 +179,7 @@ export default function TransferPage({ userId, selectedAccountId, onClose }: Tra
         <button
           onClick={handleSubmit}
           disabled={loading}
-          className="w-full bg-primary text-white py-4 rounded-2xl font-semibold text-base shadow-lg shadow-primary/30 active:scale-[0.98] transition-transform mt-2 disabled:opacity-60"
+          className="w-full bg-primary text-white py-4 rounded-2xl font-semibold text-base active:scale-[0.98] transition-transform mt-2 disabled:opacity-60"
         >
           {loading ? 'Проверка...' : 'Продолжить'}
         </button>
