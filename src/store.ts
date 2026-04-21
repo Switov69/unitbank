@@ -1,5 +1,6 @@
 export function formatAmount(amount: number): string {
-  return amount.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const n = typeof amount === 'number' && !isNaN(amount) ? amount : 0;
+  return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function formatDate(dateStr: string): string {
@@ -38,6 +39,7 @@ export interface AppSettings {
   pinEnabled: boolean;
   incognitoMode: boolean;
   theme: Theme;
+  notificationsEnabled: boolean;
 }
 
 const SETTINGS_KEY = 'unitbank_settings_v3';
@@ -45,9 +47,9 @@ const SETTINGS_KEY = 'unitbank_settings_v3';
 export function getSettings(): AppSettings {
   try {
     const data = localStorage.getItem(SETTINGS_KEY);
-    if (data) return { pinEnabled: true, incognitoMode: false, theme: 'system', ...JSON.parse(data) };
+    if (data) return { pinEnabled: true, incognitoMode: false, theme: 'system', notificationsEnabled: true, ...JSON.parse(data) };
   } catch {}
-  return { pinEnabled: true, incognitoMode: false, theme: 'system' };
+  return { pinEnabled: true, incognitoMode: false, theme: 'system', notificationsEnabled: true };
 }
 
 export function saveSettings(settings: AppSettings): void {

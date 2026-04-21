@@ -59,42 +59,42 @@ body {
 ::-webkit-scrollbar { display: none; }
 
 input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; }
 
 @keyframes slideUp {
   from { transform: translateY(100%); opacity: 0.5; }
   to { transform: translateY(0); opacity: 1; }
 }
-
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
 }
-
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   20%, 60% { transform: translateX(-6px); }
   40%, 80% { transform: translateX(6px); }
 }
-
 @keyframes cardSlideLeft {
-  from { transform: translateX(24px); opacity: 0; }
+  from { transform: translateX(28px); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
-
 @keyframes cardSlideRight {
-  from { transform: translateX(-24px); opacity: 0; }
+  from { transform: translateX(-28px); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
+}
+@keyframes txAppear {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes balanceFlash {
+  0% { opacity: 1; }
+  30% { opacity: 0.4; transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 .animate-slide-up { animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
@@ -103,6 +103,8 @@ input[type="number"] { -moz-appearance: textfield; }
 .animate-shake { animation: shake 0.4s ease; }
 .animate-card-left { animation: cardSlideLeft 0.22s cubic-bezier(0.4, 0, 0.2, 1); }
 .animate-card-right { animation: cardSlideRight 0.22s cubic-bezier(0.4, 0, 0.2, 1); }
+.animate-tx { animation: txAppear 0.28s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.animate-balance { animation: balanceFlash 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

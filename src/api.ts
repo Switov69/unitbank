@@ -8,7 +8,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
       ...options,
     });
   } catch {
-    throw new Error('Нет связи с сервером. Проверьте подключение.');
+    throw new Error('Нет связи с сервером.');
   }
   if (!res.ok) {
     const data = await res.json().catch(() => ({ error: 'Ошибка сервера' }));
@@ -91,15 +91,86 @@ export async function repayCredit(creditId: string, amount: number, fromAccountI
 }
 
 export const ACCOUNT_COLORS = [
-  { hex: '#4285f4', label: 'Синий' },
-  { hex: '#7c3aed', label: 'Фиолетовый' },
-  { hex: '#059669', label: 'Зелёный' },
-  { hex: '#e11d48', label: 'Малиновый' },
-  { hex: '#ea580c', label: 'Оранжевый' },
-  { hex: '#0891b2', label: 'Бирюзовый' },
-  { hex: '#d97706', label: 'Золотой' },
-  { hex: '#475569', label: 'Тёмный' },
+  { hex: '#4285f4', label: 'Синий', gradient: '' },
+  { hex: '#7c3aed', label: 'Фиолетовый', gradient: '' },
+  { hex: '#059669', label: 'Зелёный', gradient: '' },
+  { hex: '#e11d48', label: 'Малиновый', gradient: '' },
+  { hex: '#ea580c', label: 'Оранжевый', gradient: '' },
+  { hex: '#0891b2', label: 'Бирюзовый', gradient: '' },
+  { hex: '#d97706', label: 'Золотой', gradient: '' },
+  { hex: '#475569', label: 'Тёмный', gradient: '' },
 ];
+
+export const ACCOUNT_PATTERNS = [
+  {
+    id: 'p1',
+    label: 'Аврора',
+    premium: true,
+    css: 'linear-gradient(135deg, #667eea 0%, #764ba2 40%, #f093fb 100%)',
+    chip: '#764ba2',
+  },
+  {
+    id: 'p2',
+    label: 'Закат',
+    premium: true,
+    css: 'linear-gradient(135deg, #f7971e 0%, #ffd200 50%, #f7971e 100%)',
+    chip: '#f7971e',
+  },
+  {
+    id: 'p3',
+    label: 'Океан',
+    premium: true,
+    css: 'linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)',
+    chip: '#0072ff',
+  },
+  {
+    id: 'p4',
+    label: 'Лес',
+    premium: true,
+    css: 'linear-gradient(135deg, #134e5e 0%, #71b280 100%)',
+    chip: '#71b280',
+  },
+  {
+    id: 'p5',
+    label: 'Лава',
+    premium: true,
+    css: 'linear-gradient(135deg, #f953c6 0%, #b91d73 100%)',
+    chip: '#b91d73',
+  },
+  {
+    id: 'p6',
+    label: 'Мята',
+    premium: true,
+    css: 'linear-gradient(135deg, #0fd850 0%, #f9f047 100%)',
+    chip: '#0fd850',
+  },
+  {
+    id: 'p7',
+    label: 'Космос',
+    premium: true,
+    css: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 70%, #533483 100%)',
+    chip: '#533483',
+  },
+  {
+    id: 'p8',
+    label: 'Лёд',
+    premium: true,
+    css: 'linear-gradient(135deg, #e0eafc 0%, #cfdef3 50%, #a8c0ff 100%)',
+    chip: '#a8c0ff',
+  },
+];
+
+export function getCardStyle(color: string): { background: string; chipColor: string } {
+  const pattern = ACCOUNT_PATTERNS.find((p) => p.id === color);
+  if (pattern) return { background: pattern.css, chipColor: pattern.chip };
+  const hex = color || '#4285f4';
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.max(0, (num >> 16) - 40);
+  const g = Math.max(0, ((num >> 8) & 0xff) - 40);
+  const b = Math.max(0, (num & 0xff) - 40);
+  const dark = '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+  return { background: `linear-gradient(135deg, ${hex} 0%, ${dark} 100%)`, chipColor: hex };
+}
 
 export function calcCurrentInterest(credit: Credit): number {
   if (credit.status !== 'active') return 0;

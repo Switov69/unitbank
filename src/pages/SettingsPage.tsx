@@ -321,7 +321,7 @@ export default function SettingsPage({ user, onLogout, onDeleteAccount, onUserUp
           <ChevronRight className="w-5 h-5 text-on-surface-variant/50" />
         </button>
         <div className="h-px bg-outline/20 mx-5" />
-        <div className="flex items-center gap-4 px-5 py-4">
+        <div className="px-5 py-3 flex items-center gap-4">
           <div className="w-10 h-10 bg-primary-surface rounded-xl flex items-center justify-center">
             <Bell className="w-5 h-5 text-primary" />
           </div>
@@ -329,7 +329,7 @@ export default function SettingsPage({ user, onLogout, onDeleteAccount, onUserUp
             <p className="text-sm font-medium text-on-surface">Уведомления</p>
             <p className="text-xs text-on-surface-variant mt-0.5">Переводы и кредиты в Telegram</p>
           </div>
-          <span className="text-xs bg-success-light text-success font-medium px-2.5 py-1 rounded-full">Вкл</span>
+          <Toggle value={settings.notificationsEnabled} onChange={(v) => updateSettings({ notificationsEnabled: v })} />
         </div>
       </div>
 

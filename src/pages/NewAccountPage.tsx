@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, CreditCard, Check } from 'lucide-react';
-import { createAccount, checkAccountExists, getAccounts, ACCOUNT_COLORS } from '../api';
-import { darkenHex } from '../store';
+import { createAccount, checkAccountExists, getAccounts, ACCOUNT_COLORS, ACCOUNT_PATTERNS, getCardStyle } from '../api';
 import { hapticNotification, hapticImpact } from '../tma';
 
 interface NewAccountPageProps {
@@ -18,7 +17,6 @@ export default function NewAccountPage({ userId, isPremium, onClose, onCreated }
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [atLimit, setAtLimit] = useState(false);
-
   const maxAccounts = isPremium ? 5 : 2;
 
   useEffect(() => {
@@ -42,9 +40,7 @@ export default function NewAccountPage({ userId, isPremium, onClose, onCreated }
     } catch (e: unknown) {
       setError((e as Error).message || 'Ошибка создания счёта');
       hapticNotification('error');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   if (atLimit) {
@@ -62,7 +58,7 @@ export default function NewAccountPage({ userId, isPremium, onClose, onCreated }
           </div>
           <p className="text-lg font-semibold text-on-surface text-center mb-2">Лимит счетов</p>
           <p className="text-on-surface-variant text-sm text-center">
-            Максимальное количество счетов — {maxAccounts}{isPremium ? ' (Premium)' : ''}. Удалите один из существующих, чтобы создать новый.
+            Максимум {maxAccounts} счетов{isPremium ? ' (Premium)' : ''}. Удалите один, чтобы создать новый.
           </p>
         </div>
       </div>
@@ -81,7 +77,7 @@ export default function NewAccountPage({ userId, isPremium, onClose, onCreated }
     );
   }
 
-  const cardBg = `linear-gradient(135deg, ${selectedColor} 0%, ${darkenHex(selectedColor)} 100%)`;
+  const cardStyle = getCardStyle(selectedColor);
 
   return (
     <div className="min-h-full flex flex-col bg-bg animate-slide-up">
@@ -91,8 +87,8 @@ export default function NewAccountPage({ userId, isPremium, onClose, onCreated }
         </button>
         <h1 className="text-xl font-bold text-on-surface">Новый счёт</h1>
       </div>
-      <div className="flex-1 px-4 pt-4 space-y-5">
-        <div className="rounded-[24px] p-5 text-white flex items-center gap-4 transition-all duration-300" style={{ background: cardBg }}>
+      <div className="flex-1 px-4 pt-4 space-y-5 overflow-y-auto pb-8">
+        <div className="rounded-[24px] p-5 text-white flex items-center gap-4 transition-all duration-300" style={{ background: cardStyle.background }}>
           <CreditCard className="w-8 h-8 text-white/80" />
           <div>
             <p className="text-white/60 text-xs">Новый счёт</p>
@@ -103,15 +99,7 @@ export default function NewAccountPage({ userId, isPremium, onClose, onCreated }
           <label className="text-sm font-medium text-on-surface-variant mb-2 block">Название счёта</label>
           <div className="flex items-center bg-surface border-2 border-outline/50 rounded-2xl overflow-hidden focus-within:border-primary transition-colors">
             <span className="pl-5 text-on-surface-variant font-medium text-base">ub-</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => { setName(e.target.value.toLowerCase()); setError(''); }}
-              placeholder="savings"
-              autoFocus
-              maxLength={20}
-              className="flex-1 py-4 pr-5 text-base text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none bg-transparent"
-            />
+            <input type="text" value={name} onChange={(e) => { setName(e.target.value.toLowerCase()); setError(''); }} placeholder="savings" autoFocus maxLength={20} className="flex-1 py-4 pr-5 text-base text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none bg-transparent" />
           </div>
           {error && <p className="text-error text-sm mt-2 animate-fade-in">{error}</p>}
         </div>
@@ -120,10 +108,7 @@ export default function NewAccountPage({ userId, isPremium, onClose, onCreated }
           <div className="grid grid-cols-4 gap-3">
             {ACCOUNT_COLORS.map((c) => (
               <button key={c.hex} onClick={() => { setSelectedColor(c.hex); hapticImpact('light'); }} className="flex flex-col items-center gap-1.5">
-                <div
-                  className="w-14 h-14 rounded-2xl transition-all duration-200 flex items-center justify-center"
-                  style={{ background: c.hex, boxShadow: selectedColor === c.hex ? `0 0 0 3px var(--color-bg), 0 0 0 5px ${c.hex}` : 'none', transform: selectedColor === c.hex ? 'scale(1.1)' : 'scale(1)' }}
-                >
+                <div className="w-14 h-14 rounded-2xl transition-all duration-200 flex items-center justify-center" style={{ background: c.hex, boxShadow: selectedColor === c.hex ? `0 0 0 3px var(--color-bg), 0 0 0 5px ${c.hex}` : 'none', transform: selectedColor === c.hex ? 'scale(1.1)' : 'scale(1)' }}>
                   {selectedColor === c.hex && <div className="w-3 h-3 bg-white rounded-full" />}
                 </div>
                 <span className="text-xs text-on-surface-variant">{c.label}</span>
@@ -131,11 +116,22 @@ export default function NewAccountPage({ userId, isPremium, onClose, onCreated }
             ))}
           </div>
         </div>
-        <button
-          onClick={handleCreate}
-          disabled={loading}
-          className="w-full bg-primary text-white py-4 rounded-2xl font-semibold text-base shadow-lg shadow-primary/30 active:scale-[0.98] transition-transform disabled:opacity-60"
-        >
+        {isPremium && (
+          <div>
+            <label className="text-sm font-medium text-warning mb-3 block">⭐ Premium — абстракции</label>
+            <div className="grid grid-cols-4 gap-3">
+              {ACCOUNT_PATTERNS.map((p) => (
+                <button key={p.id} onClick={() => { setSelectedColor(p.id); hapticImpact('light'); }} className="flex flex-col items-center gap-1.5">
+                  <div className="w-14 h-14 rounded-2xl transition-all duration-200 flex items-center justify-center" style={{ background: p.css, boxShadow: selectedColor === p.id ? `0 0 0 3px var(--color-bg), 0 0 0 5px ${p.chip}` : 'none', transform: selectedColor === p.id ? 'scale(1.1)' : 'scale(1)' }}>
+                    {selectedColor === p.id && <div className="w-3 h-3 bg-white rounded-full" />}
+                  </div>
+                  <span className="text-xs text-on-surface-variant">{p.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <button onClick={handleCreate} disabled={loading} className="w-full bg-primary text-white py-4 rounded-2xl font-semibold text-base active:scale-[0.98] transition-transform disabled:opacity-60">
           {loading ? 'Создание...' : 'Создать счёт'}
         </button>
       </div>

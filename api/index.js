@@ -3,7 +3,7 @@ const { Pool } = pkg;
 
 let _pool;
 function getPool() {
-  if (!_pool) _pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 1 });
+  if (!_pool) _pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 5 });
   return _pool;
 }
 
@@ -215,10 +215,10 @@ export default async function handler(req, res) {
         await client.query('UPDATE accounts SET balance=balance+$1 WHERE id=$2', [rounded, toAcc.id]);
         await addTx(client, toAcc.id, 'income', rounded, `Перевод ← ${fromAcc.name}`);
         await client.query('COMMIT');
-        const { rows: uRows } = await pool.query('SELECT u.telegram_id FROM users u JOIN accounts a ON a.user_id=u.id WHERE a.id=$1', [toAcc.id]);
+        const { rows: uRows } = await client.query('SELECT u.telegram_id FROM users u JOIN accounts a ON a.user_id=u.id WHERE a.id=$1', [toAcc.id]);
         if (uRows[0]?.telegram_id) tgSend(uRows[0].telegram_id, `💰 <b>Входящий перевод</b>\n\nСумма: <b>${fmt(rounded)} CBC</b>\nНа счёт: <code>${toAcc.name}</code>\nОт: <code>${fromAcc.name}</code>`);
         return ok(res, { success: true });
-      } catch (e) { await client.query('ROLLBACK'); return fail(res, 500, e.message); }
+      } catch (e) { await client.query('ROLLBACK').catch(() => {}); return fail(res, 500, e.message); }
       finally { client.release(); }
     }
 
@@ -268,10 +268,10 @@ export default async function handler(req, res) {
           await client.query('UPDATE accounts SET balance=balance+$1 WHERE id=$2', [credit.amount, credit.target_account_id]);
           await addTx(client, credit.target_account_id, 'credit', parseFloat(credit.amount), `Кредит одобрен: +${fmt(credit.amount)} CBC`);
           await client.query('COMMIT');
-          const { rows: uRows } = await pool.query('SELECT telegram_id FROM users WHERE id=$1', [credit.user_id]);
+          const { rows: uRows } = await client.query('SELECT telegram_id FROM users WHERE id=$1', [credit.user_id]);
           if (uRows[0]?.telegram_id) tgSend(uRows[0].telegram_id, `✅ <b>Кредит одобрен!</b>\n\nСумма: <b>${fmt(credit.amount)} CBC</b>\nЗачислена на счёт.\n\n📌 Ставка: ${parseFloat(credit.interest_rate) * 100}% в неделю.`);
           return ok(res, { success: true });
-        } catch (e) { await client.query('ROLLBACK'); return fail(res, 500, e.message); }
+        } catch (e) { await client.query('ROLLBACK').catch(() => {}); return fail(res, 500, e.message); }
         finally { client.release(); }
       }
 
@@ -318,7 +318,7 @@ export default async function handler(req, res) {
           const newStatus = newPaid >= parseFloat(credit.amount) ? 'paid' : 'active';
           await client.query('UPDATE credits SET paid_amount=$1,interest_sent=$2,status=$3 WHERE id=$4', [newPaid, newInterestSent, newStatus, credit.id]);
           await client.query('COMMIT');
-          const { rows: uRows } = await pool.query('SELECT telegram_id FROM users WHERE id=$1', [credit.user_id]);
+          const { rows: uRows } = await client.query('SELECT telegram_id FROM users WHERE id=$1', [credit.user_id]);
           if (uRows[0]?.telegram_id) {
             const newRemaining = Math.max(0, Math.round((parseFloat(credit.amount) - newPaid) * 100) / 100);
             tgSend(uRows[0].telegram_id, newStatus === 'paid'
@@ -326,7 +326,7 @@ export default async function handler(req, res) {
               : `💳 <b>Платёж принят</b>\n\nОплачено: <b>${fmt(actualRepay)} CBC</b>\nОсталось: <b>${fmt(newRemaining)} CBC</b>`);
           }
           return ok(res, { success: true, newStatus });
-        } catch (e) { await client.query('ROLLBACK'); return fail(res, 500, e.message); }
+        } catch (e) { await client.query('ROLLBACK').catch(() => {}); return fail(res, 500, e.message); }
         finally { client.release(); }
       }
     }
@@ -379,11 +379,11 @@ export default async function handler(req, res) {
             await client.query('UPDATE accounts SET balance=balance+$1 WHERE id=$2', [credit.amount, credit.target_account_id]);
             await addTx(client, credit.target_account_id, 'credit', parseFloat(credit.amount), `Кредит одобрен: +${fmt(credit.amount)} CBC`);
             await client.query('COMMIT');
-            const { rows: uRows } = await pool.query('SELECT telegram_id FROM users WHERE id=$1', [credit.user_id]);
+            const { rows: uRows } = await client.query('SELECT telegram_id FROM users WHERE id=$1', [credit.user_id]);
             if (uRows[0]?.telegram_id) tgSend(uRows[0].telegram_id, `✅ <b>Кредит одобрен!</b>\n\nСумма: <b>${fmt(credit.amount)} CBC</b>\nЗачислена на счёт.\n\n📌 Ставка: ${parseFloat(credit.interest_rate) * 100}% в неделю.`);
             await tgEdit(chatId, messageId, query.message.text + '\n\n✅ <b>Одобрено</b>');
             await tgAnswer(query.id, '✅ Одобрено');
-          } catch (e) { await client.query('ROLLBACK'); await tgAnswer(query.id, `Ошибка: ${e.message}`); }
+          } catch (e) { await client.query('ROLLBACK').catch(() => {}); await tgAnswer(query.id, `Ошибка: ${e.message}`); }
           finally { client.release(); }
         }
 
