@@ -178,3 +178,43 @@ export function calcCurrentInterest(credit: Credit): number {
   const totalInterest = Math.round(credit.amount * credit.interestRate * weeksPassed * 100) / 100;
   return Math.max(0, Math.round((totalInterest - credit.interestSent) * 100) / 100);
 }
+
+import { Office, Parcel } from './types';
+
+export const OFFICES: Office[] = [
+  { id: 'o1', region: 'Столица', city: 'Holeland', address: 'АСКБ авеню, 6', name: 'Отделение №1' },
+  { id: 'o2', region: 'Антегрия', city: 'Данюшатаун', address: 'Центр', name: 'Отделение №2' },
+];
+
+export async function getParcels(nickname: string): Promise<Parcel[]> {
+  return apiFetch<Parcel[]>(`parcels?nickname=${encodeURIComponent(nickname)}`);
+}
+
+export async function createParcel(data: {
+  senderNickname: string;
+  recipientNickname: string;
+  description: string;
+  fromOfficeId: string;
+  toOfficeId: string;
+  cashOnDelivery: boolean;
+  cashAmount: number;
+}): Promise<Parcel> {
+  return apiFetch<Parcel>('parcels', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateParcelStatus(parcelId: string, status: string): Promise<Parcel> {
+  return apiFetch<Parcel>(`parcels/${encodeURIComponent(parcelId)}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function payParcelCash(parcelId: string, fromAccountId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await apiFetch(`parcels/${encodeURIComponent(parcelId)}/pay`, {
+      method: 'POST',
+      body: JSON.stringify({ fromAccountId }),
+    });
+    return { success: true };
+  } catch (e: unknown) { return { success: false, error: (e as Error).message }; }
+}

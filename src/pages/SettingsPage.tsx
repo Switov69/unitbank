@@ -145,17 +145,18 @@ export default function SettingsPage({ user, onLogout, onDeleteAccount, onUserUp
           </button>
           <h1 className="text-xl font-bold text-on-surface">UnitBank Premium</h1>
         </div>
-        <div className="px-4 space-y-4">
-          <div className="bg-surface rounded-3xl p-6 border border-warning/30">
+        <div className="px-4 space-y-4 pb-8">
+          <div className="bg-surface rounded-3xl p-6">
             <div className="text-3xl mb-2">⭐</div>
             <h2 className="text-xl font-bold text-on-surface mb-1">Premium</h2>
             <p className="text-on-surface-variant text-sm">Расширенные возможности UnitBank на 1 месяц</p>
             <p className="text-2xl font-extrabold text-warning mt-4">2.5 CBC <span className="text-sm font-normal text-on-surface-variant">/ месяц</span></p>
           </div>
-          <div className="bg-surface rounded-3xl p-5 border border-outline/20 space-y-3">
+          <div className="bg-surface rounded-3xl p-5 space-y-3">
             {[
               ['⭐', 'Бейджик рядом с ником'],
               ['🏦', 'До 5 счетов вместо 2'],
+              ['🎨', '8 абстрактных стилей карточки счёта (Windows 11)'],
               ['📉', 'Сниженная ставка по кредитам — 1% в неделю'],
               ['🎁', 'Пробный период в других сервисах Obsidian Group'],
             ].map(([icon, text]) => (

@@ -257,8 +257,10 @@ export default function AccountsPage({ user, selectedAccountId, onSelectAccount,
                 target.addEventListener('touchend', cancel, { once: true });
                 target.addEventListener('touchmove', cancel, { once: true });
               }}
-              className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 flex-shrink-0 ${isActive ? 'text-white' : 'bg-surface text-on-surface-variant border border-outline/50'}`}
-              style={isActive ? { background: chipStyle.chipColor } : {}}
+              className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all duration-200 flex-shrink-0 ${isActive ? 'text-white' : 'text-on-surface-variant'}`}
+              style={isActive
+                ? { background: chipStyle.chipColor }
+                : { background: 'var(--color-surface)', border: '1px solid color-mix(in srgb, var(--color-outline) 50%, transparent)' }}
             >
               {acc.name}
             </button>

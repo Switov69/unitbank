@@ -17,6 +17,10 @@ function rowToAccount(r) { return { id: r.id, userId: r.user_id, name: r.name, b
 function rowToTransaction(r) { return { id: r.id, accountId: r.account_id, type: r.type, amount: parseFloat(r.amount), description: r.description, createdAt: r.created_at }; }
 function rowToCredit(r) { return { id: r.id, userId: r.user_id, targetAccountId: r.target_account_id, amount: parseFloat(r.amount), paidAmount: parseFloat(r.paid_amount), interestSent: parseFloat(r.interest_sent), interestRate: parseFloat(r.interest_rate), purpose: r.purpose || '', status: r.status, createdAt: r.created_at }; }
 
+function rowToParcel(r) {
+  return { id: r.id, ttn: r.ttn, senderNickname: r.sender_nickname, recipientNickname: r.recipient_nickname, description: r.description || '', fromOfficeId: r.from_office_id, toOfficeId: r.to_office_id, cashOnDelivery: !!r.cash_on_delivery, cashAmount: parseFloat(r.cash_amount) || 0, cashPaid: !!r.cash_paid, status: r.status, createdAt: r.created_at };
+}
+
 async function addTx(client, accountId, type, amount, description) {
   await client.query('INSERT INTO transactions (id,account_id,type,amount,description) VALUES ($1,$2,$3,$4,$5)', [genId(), accountId, type, amount, description]);
 }
@@ -397,6 +401,93 @@ export default async function handler(req, res) {
         }
       }
       return ok(res, { ok: true });
+    }
+
+    if (route === 'parcels' && method === 'GET') {
+      const { nickname } = req.query;
+      if (!nickname) return fail(res, 400, 'nickname required');
+      const { rows } = await pool.query(
+        'SELECT * FROM parcels WHERE sender_nickname=$1 OR recipient_nickname=$1 ORDER BY created_at DESC',
+        [nickname]
+      );
+      return ok(res, rows.map(rowToParcel));
+    }
+
+    if (route === 'parcels' && method === 'POST') {
+      const { senderNickname, recipientNickname, description, fromOfficeId, toOfficeId, cashOnDelivery, cashAmount } = req.body;
+      if (!senderNickname || !recipientNickname || !fromOfficeId || !toOfficeId) return fail(res, 400, 'Не все поля заполнены');
+      const ttn = '#' + String(Math.floor(1000 + Math.random() * 9000));
+      const id = genId();
+      const { rows } = await pool.query(
+        `INSERT INTO parcels (id,ttn,sender_nickname,recipient_nickname,description,from_office_id,to_office_id,cash_on_delivery,cash_amount,cash_paid,status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false,'created') RETURNING *`,
+        [id, ttn, senderNickname, recipientNickname, description || '', fromOfficeId, toOfficeId, !!cashOnDelivery, cashOnDelivery ? parseFloat(cashAmount) || 0 : 0]
+      );
+      const parcel = rowToParcel(rows[0]);
+      const adminId = process.env.ADMIN_TELEGRAM_ID;
+      if (adminId) {
+        tgSend(adminId, `📦 <b>Новая посылка</b>\n\nТТН: <code>${ttn}</code>\nОт: <b>${senderNickname}</b>\nКому: <b>${recipientNickname}</b>\nОписание: ${description || '—'}${cashOnDelivery ? `\nНалож. платёж: ${fmt(cashAmount)} CBC` : ''}`);
+      }
+      return created(res, parcel);
+    }
+
+    const parcelStatusMatch = route.match(/^parcels\/([^/]+)\/status$/);
+    if (parcelStatusMatch && method === 'PUT') {
+      const parcelId = parcelStatusMatch[1];
+      const { status } = req.body;
+      const { rows } = await pool.query('UPDATE parcels SET status=$1 WHERE id=$2 RETURNING *', [status, parcelId]);
+      if (!rows[0]) return fail(res, 404, 'Посылка не найдена');
+      const parcel = rowToParcel(rows[0]);
+      const adminId = process.env.ADMIN_TELEGRAM_ID;
+      if (status === 'sent' && adminId) {
+        tgSend(adminId, `📬 <b>Посылка отправлена</b>\n\nТТН: <code>${parcel.ttn}</code>\nОт: <b>${parcel.senderNickname}</b> → <b>${parcel.recipientNickname}</b>`);
+      }
+      const notifyNick = status === 'sent' ? parcel.recipientNickname : status === 'received' ? parcel.senderNickname : null;
+      if (notifyNick) {
+        const { rows: uRows } = await pool.query('SELECT telegram_id FROM users WHERE LOWER(nickname)=LOWER($1)', [notifyNick]);
+        if (uRows[0]?.telegram_id) {
+          const msg = status === 'sent'
+            ? `📬 <b>Посылка в пути!</b>\n\nТТН: <code>${parcel.ttn}</code>\nОт: <b>${parcel.senderNickname}</b>`
+            : `✅ <b>Посылка получена</b>\n\nТТН: <code>${parcel.ttn}</code>`;
+          tgSend(uRows[0].telegram_id, msg);
+        }
+      }
+      return ok(res, parcel);
+    }
+
+    const parcelPayMatch = route.match(/^parcels\/([^/]+)\/pay$/);
+    if (parcelPayMatch && method === 'POST') {
+      const parcelId = parcelPayMatch[1];
+      const { fromAccountId } = req.body;
+      const { rows: pRows } = await pool.query('SELECT * FROM parcels WHERE id=$1', [parcelId]);
+      if (!pRows[0]) return fail(res, 404, 'Посылка не найдена');
+      const parcel = rowToParcel(pRows[0]);
+      if (!parcel.cashOnDelivery || parcel.cashPaid) return fail(res, 400, 'Оплата не требуется');
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows: accRows } = await client.query('SELECT * FROM accounts WHERE id=$1 FOR UPDATE', [fromAccountId]);
+        if (!accRows[0] || parseFloat(accRows[0].balance) < parcel.cashAmount) {
+          await client.query('ROLLBACK');
+          return fail(res, 400, 'Недостаточно средств');
+        }
+        await client.query('UPDATE accounts SET balance=balance-$1 WHERE id=$2', [parcel.cashAmount, fromAccountId]);
+        await addTx(client, fromAccountId, 'expense', parcel.cashAmount, `Наложенный платёж по посылке ${parcel.ttn}`);
+        const { rows: senderAccRows } = await client.query(
+          'SELECT a.id FROM accounts a JOIN users u ON u.id=a.user_id WHERE LOWER(u.nickname)=LOWER($1) ORDER BY a.created_at ASC LIMIT 1',
+          [parcel.senderNickname]
+        );
+        if (senderAccRows[0]) {
+          await client.query('UPDATE accounts SET balance=balance+$1 WHERE id=$2', [parcel.cashAmount, senderAccRows[0].id]);
+          await addTx(client, senderAccRows[0].id, 'income', parcel.cashAmount, `Наложенный платёж за посылку ${parcel.ttn}`);
+        }
+        await client.query('UPDATE parcels SET cash_paid=true WHERE id=$1', [parcelId]);
+        await client.query('COMMIT');
+        const { rows: sURows } = await client.query('SELECT telegram_id FROM users WHERE LOWER(nickname)=LOWER($1)', [parcel.senderNickname]);
+        if (sURows[0]?.telegram_id) tgSend(sURows[0].telegram_id, `💰 <b>Наложенный платёж получен</b>\n\nПосылка: <code>${parcel.ttn}</code>\nСумма: <b>${fmt(parcel.cashAmount)} CBC</b>`);
+        return ok(res, { success: true });
+      } catch (e) { await client.query('ROLLBACK').catch(() => {}); return fail(res, 500, e.message); }
+      finally { client.release(); }
     }
 
     fail(res, 404, 'Not found');

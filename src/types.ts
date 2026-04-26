@@ -40,5 +40,32 @@ export interface Credit {
   createdAt: string;
 }
 
+export interface Office {
+  id: string;
+  region: string;
+  city: string;
+  address: string;
+  name: string;
+}
+
+export type ParcelStatus = 'created' | 'sent' | 'delivered' | 'received';
+
+export interface Parcel {
+  id: string;
+  ttn: string;
+  senderNickname: string;
+  recipientNickname: string;
+  description: string;
+  fromOfficeId: string;
+  toOfficeId: string;
+  cashOnDelivery: boolean;
+  cashAmount: number;
+  cashPaid: boolean;
+  status: ParcelStatus;
+  createdAt: string;
+}
+
 export type TabType = 'accounts' | 'credits' | 'settings';
+export type MailTabType = 'parcels' | 'create' | 'settings';
+export type AppMode = 'bank' | 'mail';
 export type OverlayType = 'transfer' | 'new-account' | null;

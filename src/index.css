@@ -108,3 +108,25 @@ input[type="number"] { -moz-appearance: textfield; }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+@keyframes dockSlideLeft {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-110%); opacity: 0; }
+}
+@keyframes dockSlideInLeft {
+  from { transform: translateX(-110%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes dockSlideRight {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(110%); opacity: 0; }
+}
+@keyframes dockSlideInRight {
+  from { transform: translateX(110%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.dock-slide-out-left { animation: dockSlideLeft 0.28s cubic-bezier(0.4,0,0.2,1) forwards; }
+.dock-slide-in-left { animation: dockSlideInLeft 0.28s cubic-bezier(0.4,0,0.2,1) forwards; }
+.dock-slide-out-right { animation: dockSlideRight 0.28s cubic-bezier(0.4,0,0.2,1) forwards; }
+.dock-slide-in-right { animation: dockSlideInRight 0.28s cubic-bezier(0.4,0,0.2,1) forwards; }
