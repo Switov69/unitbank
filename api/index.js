@@ -236,6 +236,7 @@ export default async function handler(req, res) {
     }
 
 
+    if (route === 'transfer' && method === 'POST') {
       const { fromAccountId, toAccountName, amount } = req.body;
       const rounded = Math.round(amount * 100) / 100;
       if (!fromAccountId || !toAccountName || rounded <= 0) return fail(res, 400, 'Некорректные данные');
