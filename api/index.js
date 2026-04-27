@@ -199,7 +199,43 @@ export default async function handler(req, res) {
       return ok(res, rows.map(rowToTransaction));
     }
 
-    if (route === 'transfer' && method === 'POST') {
+    if (route === 'transfer/external' && method === 'POST') {
+      const { fromAccountId, toExternalAccount, amount } = req.body;
+      const rounded = Math.round(amount * 100) / 100;
+      if (!fromAccountId || !toExternalAccount || rounded <= 0) return fail(res, 400, 'Некорректные данные');
+
+      const CBCSWIT_URL = 'https://cbcswit.duckdns.org/';
+      const ORG = process.env.CBCSWIT_ORG || '';
+      const ORG_TOKEN = process.env.CBCSWIT_ORG_TOKEN || '';
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows: fRows } = await client.query('SELECT * FROM accounts WHERE id=$1 FOR UPDATE', [fromAccountId]);
+        if (!fRows[0]) { await client.query('ROLLBACK'); return fail(res, 404, 'Счёт отправителя не найден'); }
+        const fromAcc = rowToAccount(fRows[0]);
+        if (fromAcc.balance < rounded) { await client.query('ROLLBACK'); return fail(res, 400, 'Недостаточно средств'); }
+
+        const extRes = await fetch(`${CBCSWIT_URL}account/transfer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ org: ORG, org_token: ORG_TOKEN, afrom: fromAcc.name, ato: toExternalAccount, amount: rounded, message: `Перевод из UnitBank (${fromAcc.name})` }),
+        });
+        if (!extRes.ok) {
+          await client.query('ROLLBACK');
+          const errData = await extRes.json().catch(() => ({}));
+          return fail(res, 400, errData.detail || 'Ошибка внешнего банка');
+        }
+
+        await client.query('UPDATE accounts SET balance=balance-$1 WHERE id=$2', [rounded, fromAccountId]);
+        await addTx(client, fromAccountId, 'expense', rounded, `Внешний перевод → ${toExternalAccount}`);
+        await client.query('COMMIT');
+        return ok(res, { success: true });
+      } catch (e) { await client.query('ROLLBACK').catch(() => {}); return fail(res, 500, e.message); }
+      finally { client.release(); }
+    }
+
+
       const { fromAccountId, toAccountName, amount } = req.body;
       const rounded = Math.round(amount * 100) / 100;
       if (!fromAccountId || !toAccountName || rounded <= 0) return fail(res, 400, 'Некорректные данные');

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Send, Check } from 'lucide-react';
-import { getAccounts, transfer, checkAccountExists } from '../api';
+import { ArrowLeft, Send, Check, Building2, Home } from 'lucide-react';
+import { getAccounts, transfer, checkAccountExists, externalCheckAccount, externalTransfer } from '../api';
 import { formatAmount, getSettings } from '../store';
 import { hapticNotification, hapticImpact } from '../tma';
 import { BankAccount } from '../types';
@@ -12,9 +12,11 @@ interface TransferPageProps {
 }
 
 type Step = 'form' | 'confirm' | 'success';
+type BankType = 'internal' | 'external';
 
 export default function TransferPage({ userId, selectedAccountId, onClose }: TransferPageProps) {
   const [step, setStep] = useState<Step>('form');
+  const [bankType, setBankType] = useState<BankType>('internal');
   const [fromId, setFromId] = useState(selectedAccountId);
   const [toAccount, setToAccount] = useState('');
   const [amount, setAmount] = useState('');
@@ -27,16 +29,30 @@ export default function TransferPage({ userId, selectedAccountId, onClose }: Tra
 
   const fromAccount = accounts.find((a) => a.id === fromId);
 
+  const handleBankTypeChange = (type: BankType) => {
+    setBankType(type);
+    setToAccount('');
+    setError('');
+    hapticImpact('light');
+  };
+
   const handleSubmit = async () => {
     const trimAccount = toAccount.trim();
     const numAmount = parseFloat(amount);
+
     if (!trimAccount) { setError('Введите счёт получателя'); hapticNotification('error'); return; }
     if (isNaN(numAmount) || numAmount <= 0) { setError('Введите корректную сумму'); hapticNotification('error'); return; }
     if (!fromAccount || fromAccount.balance < numAmount) { setError('Недостаточно средств'); hapticNotification('error'); return; }
+
     setLoading(true);
     try {
-      const exists = await checkAccountExists(trimAccount);
-      if (!exists) { setError('Счёт получателя не найден'); hapticNotification('error'); return; }
+      if (bankType === 'internal') {
+        const exists = await checkAccountExists(trimAccount);
+        if (!exists) { setError('Счёт получателя не найден в UnitBank'); hapticNotification('error'); return; }
+      } else {
+        const exists = await externalCheckAccount(trimAccount);
+        if (!exists) { setError('Счёт не найден во внешнем банке'); hapticNotification('error'); return; }
+      }
       setError('');
       hapticImpact('medium');
       setStep('confirm');
@@ -48,7 +64,10 @@ export default function TransferPage({ userId, selectedAccountId, onClose }: Tra
   const handleConfirm = async () => {
     setLoading(true);
     try {
-      const result = await transfer(fromId, toAccount.trim(), parseFloat(amount));
+      const result = bankType === 'internal'
+        ? await transfer(fromId, toAccount.trim(), parseFloat(amount))
+        : await externalTransfer(fromId, toAccount.trim(), parseFloat(amount));
+
       if (result.success) {
         hapticNotification('success');
         setStep('success');
@@ -77,6 +96,9 @@ export default function TransferPage({ userId, selectedAccountId, onClose }: Tra
         <p className="text-on-surface-variant text-center text-sm">
           {formatAmount(parseFloat(amount))} CBC → {toAccount.trim()}
         </p>
+        {bankType === 'external' && (
+          <p className="text-xs text-on-surface-variant/60 mt-1">Внешний банк</p>
+        )}
       </div>
     );
   }
@@ -107,13 +129,25 @@ export default function TransferPage({ userId, selectedAccountId, onClose }: Tra
                 <span className="text-sm text-on-surface-variant">Счёт получателя</span>
                 <span className="text-sm font-medium text-on-surface">{toAccount.trim()}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-on-surface-variant">Банк</span>
+                <span className={`text-sm font-medium ${bankType === 'external' ? 'text-warning' : 'text-primary'}`}>
+                  {bankType === 'internal' ? 'UnitBank' : 'Внешний банк'}
+                </span>
+              </div>
             </div>
           </div>
+          {bankType === 'external' && (
+            <div className="mt-3 bg-warning-light rounded-2xl px-4 py-3 flex items-start gap-2">
+              <Building2 className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-warning">Перевод во внешний банк необратим. Убедитесь, что счёт указан верно.</p>
+            </div>
+          )}
           {error && <p className="text-error text-sm font-medium mt-3 animate-fade-in">{error}</p>}
           <button
             onClick={handleConfirm}
             disabled={loading}
-            className="w-full mt-6 bg-primary text-white py-4 rounded-2xl font-semibold text-base active:scale-[0.98] transition-transform flex items-center justify-center gap-2 disabled:opacity-60"
+            className="w-full mt-4 bg-primary text-white py-4 rounded-2xl font-semibold text-base active:scale-[0.98] transition-transform flex items-center justify-center gap-2 disabled:opacity-60"
           >
             {loading
               ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -132,7 +166,42 @@ export default function TransferPage({ userId, selectedAccountId, onClose }: Tra
         </button>
         <h1 className="text-xl font-bold text-on-surface">Перевод</h1>
       </div>
+
       <div className="flex-1 px-4 pt-4 space-y-4">
+        <div>
+          <label className="text-sm font-medium text-on-surface-variant mb-2 block">Тип перевода</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => handleBankTypeChange('internal')}
+              className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl border-2 transition-all duration-200 ${
+                bankType === 'internal'
+                  ? 'border-primary bg-primary-surface text-primary-dark'
+                  : 'border-outline/50 bg-surface text-on-surface-variant'
+              }`}
+            >
+              <Home className={`w-4 h-4 flex-shrink-0 ${bankType === 'internal' ? 'text-primary' : 'text-on-surface-variant'}`} />
+              <div className="text-left">
+                <p className="text-xs font-semibold leading-tight">UnitBank</p>
+                <p className="text-[10px] opacity-70 leading-tight">Внутри сети</p>
+              </div>
+            </button>
+            <button
+              onClick={() => handleBankTypeChange('external')}
+              className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl border-2 transition-all duration-200 ${
+                bankType === 'external'
+                  ? 'border-warning bg-warning-light text-warning'
+                  : 'border-outline/50 bg-surface text-on-surface-variant'
+              }`}
+            >
+              <Building2 className={`w-4 h-4 flex-shrink-0 ${bankType === 'external' ? 'text-warning' : 'text-on-surface-variant'}`} />
+              <div className="text-left">
+                <p className="text-xs font-semibold leading-tight">Внешний</p>
+                <p className="text-[10px] opacity-70 leading-tight">Другой банк</p>
+              </div>
+            </button>
+          </div>
+        </div>
+
         <div>
           <label className="text-sm font-medium text-on-surface-variant mb-2 block">Со счёта</label>
           <select
@@ -145,16 +214,20 @@ export default function TransferPage({ userId, selectedAccountId, onClose }: Tra
             ))}
           </select>
         </div>
+
         <div>
           <label className="text-sm font-medium text-on-surface-variant mb-2 block">Счёт получателя</label>
           <input
             type="text"
             value={toAccount}
-            onChange={(e) => { setToAccount(e.target.value.toLowerCase()); setError(''); }}
-            placeholder="Введите счёт получателя"
-            className="w-full bg-surface border-2 border-outline/50 rounded-2xl px-4 py-3.5 text-base text-on-surface placeholder:text-on-surface-variant/50 focus:border-primary focus:outline-none transition-colors"
+            onChange={(e) => { setToAccount(e.target.value); setError(''); }}
+            placeholder={bankType === 'internal' ? 'Например: ub-main' : 'Счёт в другом банке'}
+            className={`w-full bg-surface border-2 rounded-2xl px-4 py-3.5 text-base text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none transition-colors ${
+              bankType === 'external' ? 'border-warning/50 focus:border-warning' : 'border-outline/50 focus:border-primary'
+            }`}
           />
         </div>
+
         <div>
           <label className="text-sm font-medium text-on-surface-variant mb-2 block">Сумма (CBC)</label>
           <input
@@ -175,11 +248,13 @@ export default function TransferPage({ userId, selectedAccountId, onClose }: Tra
             </div>
           )}
         </div>
+
         {error && <p className="text-error text-sm font-medium animate-fade-in">{error}</p>}
+
         <button
           onClick={handleSubmit}
           disabled={loading}
-          className="w-full bg-primary text-white py-4 rounded-2xl font-semibold text-base active:scale-[0.98] transition-transform mt-2 disabled:opacity-60"
+          className="w-full bg-primary text-white py-4 rounded-2xl font-semibold text-base active:scale-[0.98] transition-transform disabled:opacity-60"
         >
           {loading ? 'Проверка...' : 'Продолжить'}
         </button>

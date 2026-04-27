@@ -218,3 +218,36 @@ export async function payParcelCash(parcelId: string, fromAccountId: string): Pr
     return { success: true };
   } catch (e: unknown) { return { success: false, error: (e as Error).message }; }
 }
+
+const CBCSWIT_URL = 'https://cbcswit.duckdns.org/';
+
+export async function externalGetBalance(accountName: string): Promise<number | null> {
+  try {
+    const res = await fetch(`${CBCSWIT_URL}account/get_balance`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(accountName),
+    });
+    if (!res.ok) return null;
+    return parseFloat(await res.json());
+  } catch { return null; }
+}
+
+export async function externalCheckAccount(accountName: string): Promise<boolean> {
+  const balance = await externalGetBalance(accountName);
+  return balance !== null && balance >= 0;
+}
+
+export async function externalTransfer(
+  fromAccountId: string,
+  toExternalAccount: string,
+  amount: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await apiFetch('transfer/external', {
+      method: 'POST',
+      body: JSON.stringify({ fromAccountId, toExternalAccount, amount }),
+    });
+    return { success: true };
+  } catch (e: unknown) { return { success: false, error: (e as Error).message }; }
+}
