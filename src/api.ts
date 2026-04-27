@@ -221,21 +221,11 @@ export async function payParcelCash(parcelId: string, fromAccountId: string): Pr
 
 const CBCSWIT_URL = 'https://cbcswit.duckdns.org/';
 
-export async function externalGetBalance(accountName: string): Promise<number | null> {
-  try {
-    const res = await fetch(`${CBCSWIT_URL}account/get_balance`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(accountName),
-    });
-    if (!res.ok) return null;
-    return parseFloat(await res.json());
-  } catch { return null; }
-}
-
 export async function externalCheckAccount(accountName: string): Promise<boolean> {
-  const balance = await externalGetBalance(accountName);
-  return balance !== null && balance >= 0;
+  try {
+    const res = await apiFetch<{ exists: boolean }>(`check-external?account=${encodeURIComponent(accountName)}`);
+    return res.exists;
+  } catch { return false; }
 }
 
 export async function externalTransfer(
