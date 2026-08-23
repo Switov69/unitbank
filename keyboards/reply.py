@@ -1,19 +1,19 @@
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
+BTN_MY_ACCOUNTS = "🗂 Мои счета"
 BTN_TRANSFER = "💸 Перевести средства"
 BTN_WITHDRAW = "🏧 Снять средства"
 BTN_DEPOSIT = "💰 Пополнить счёт"
 BTN_SETTINGS = "⚙️ Настройки"
-BTN_MY_ACCOUNTS = "🗂 Мои счета"
 BTN_CANCEL = "❌ Отмена"
 
 
 def main_menu_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
+            [KeyboardButton(text=BTN_MY_ACCOUNTS)],
             [KeyboardButton(text=BTN_TRANSFER), KeyboardButton(text=BTN_WITHDRAW)],
             [KeyboardButton(text=BTN_DEPOSIT), KeyboardButton(text=BTN_SETTINGS)],
-            [KeyboardButton(text=BTN_MY_ACCOUNTS)],
         ],
         resize_keyboard=True,
     )
