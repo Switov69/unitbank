@@ -10,8 +10,7 @@ from aiogram.types import CallbackQuery, Message
 
 import config
 from database.db import Database
-from handlers.common import cancel_flow, is_cancel_text, match_reply_account
-from handlers.main_menu import send_main_menu
+from handlers.common import cancel_flow, finish_flow, is_cancel_text, match_reply_account
 from keyboards import inline as ikb
 from keyboards import reply as rkb
 from states.states import AdminRejectStates, DepositStates
@@ -93,11 +92,12 @@ async def deposit_confirm(callback: CallbackQuery, db: Database, state: FSMConte
         callback.from_user.id, data["account_id"], data["account_number"], user["nickname"], amount
     )
 
-    await callback.message.edit_text(
+    await finish_flow(
+        callback,
+        db,
         f"✅ Заявка на пополнение {money(amount)} создана.\n\n"
-        "Ожидайте уведомления о зачислении средств на счёт после подтверждения банком."
+        "Ожидайте уведомления о зачислении средств на счёт после подтверждения банком.",
     )
-    await send_main_menu(callback.message, db, user_id=callback.from_user.id)
     await callback.answer()
 
     try:
@@ -118,8 +118,7 @@ async def deposit_confirm(callback: CallbackQuery, db: Database, state: FSMConte
 @router.callback_query(StateFilter(DepositStates.confirming), F.data == "deposit_cancel")
 async def deposit_cancel(callback: CallbackQuery, db: Database, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.edit_text("Пополнение отменено.")
-    await send_main_menu(callback.message, db, user_id=callback.from_user.id)
+    await finish_flow(callback, db, "Пополнение отменено.")
     await callback.answer()
 
 

@@ -1,20 +1,19 @@
 """Хелперы форматирования текста для сообщений бота."""
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from html import escape as h
 
 import config
 
 
 def money(amount: Decimal) -> str:
-    """Форматирует сумму как '1 234.56 Ары'."""
-    quantized = Decimal(amount).quantize(Decimal("0.01"))
+    """Форматирует сумму как '1 234 𝐀𝐩' — без копеек."""
+    quantized = Decimal(amount).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     sign = "-" if quantized < 0 else ""
     quantized = abs(quantized)
-    integer_part, _, fraction_part = f"{quantized:.2f}".partition(".")
-    grouped = f"{int(integer_part):,}".replace(",", " ")
-    return f"{sign}{grouped}.{fraction_part} {config.CURRENCY}"
+    grouped = f"{int(quantized):,}".replace(",", " ")
+    return f"{sign}{grouped} {config.CURRENCY}"
 
 
 def escape(text: str) -> str:
@@ -32,21 +31,34 @@ def tx_party_label(name: str | None, number: str | None) -> str:
     return escape(name or "Банк")
 
 
-def format_transaction(tx) -> str:
+def format_transaction_lines(tx, viewer_account_id: int) -> list[str]:
+    """
+    Возвращает две строки для одной операции:
+      • [дата] — +/-[сумма] 𝐀𝐩
+      • [иконка] [детали операции]
+    Знак зависит от того, был ли просматриваемый счёт отправителем (-) или
+    получателем (+) в этой операции.
+    """
     tx_type = tx["tx_type"]
     amount_str = money(tx["amount"])
+    date_str = format_datetime(tx["created_at"])
     from_label = tx_party_label(tx["from_name"], tx["from_number"])
     to_label = tx_party_label(tx["to_name"], tx["to_number"])
 
     if tx_type == "withdraw":
-        return f"↖️ Снятие со счёта: −{amount_str}"
-    if tx_type == "deposit":
-        return f"↘️ Пополнение счёта: +{amount_str}"
-    if tx_type == "admin_credit":
-        return f"➕ Начисление администратором: +{amount_str}"
-    if tx_type == "account_closure":
-        return f"🔄 Перевод при закрытии счёта: +{amount_str}"
-    return f"💸 {from_label} → {to_label}: {amount_str}"
+        sign, detail = "-", "🏧 Снятие средств"
+    elif tx_type == "deposit":
+        sign, detail = "+", "💰 Пополнение счёта"
+    elif tx_type == "admin_credit":
+        sign, detail = "+", "➕ Начисление администратором"
+    elif tx_type == "account_closure":
+        sign, detail = "+", "🔄 Перевод при закрытии счёта"
+    else:  # transfer
+        is_sender = tx["from_account"] == viewer_account_id
+        sign = "-" if is_sender else "+"
+        detail = f"💸 {from_label} → {to_label}"
+
+    return [f"• {date_str} — {sign}{amount_str}", f"  {detail}"]
 
 
 def format_datetime(dt) -> str:

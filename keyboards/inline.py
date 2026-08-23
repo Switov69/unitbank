@@ -1,5 +1,5 @@
 from aiogram.enums import ButtonStyle
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 import config
@@ -20,19 +20,18 @@ def region_choice_kb() -> InlineKeyboardMarkup:
 #  Главное меню / счета
 # --------------------------------------------------------------------------- #
 def main_menu_kb(accounts, active_account_id: int) -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
+    rows: list[list[InlineKeyboardButton]] = []
     if len(accounts) > 1:
-        for acc in accounts:
-            marker = "✅ " if acc["account_id"] == active_account_id else ""
-            kb.button(
-                text=f"{marker}{acc['account_name']} (№{acc['account_number']})",
-                callback_data=f"switch:{acc['account_id']}",
-            )
+        rows.append(
+            [
+                InlineKeyboardButton(text="◀", callback_data="switch_prev"),
+                InlineKeyboardButton(text="▶", callback_data="switch_next"),
+            ]
+        )
     if len(accounts) < config.MAX_ACCOUNTS_PER_USER:
-        kb.button(text="➕ Новый счёт", callback_data="new_account")
-    kb.button(text="⚙️ Настройки счёта", callback_data="acc_settings")
-    kb.adjust(1)
-    return kb.as_markup()
+        rows.append([InlineKeyboardButton(text="➕ Новый счёт", callback_data="new_account")])
+    rows.append([InlineKeyboardButton(text="⚙️ Настройки счёта", callback_data="acc_settings")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def account_settings_kb(can_delete: bool) -> InlineKeyboardMarkup:

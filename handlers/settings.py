@@ -32,8 +32,14 @@ def _cooldown_remaining(last_change) -> timedelta | None:
 
 
 @router.message(StateFilter(None), F.text == rkb.BTN_SETTINGS)
-async def settings_entry(message: Message) -> None:
-    await message.answer("⚙️ <b>Настройки</b>", reply_markup=ikb.settings_menu_kb())
+async def settings_entry(message: Message, db: Database) -> None:
+    user = await db.get_user(message.from_user.id)
+    text = (
+        "⚙️ <b>Настройки</b>\n\n"
+        f"Никнейм: {escape(user['nickname'])}\n"
+        f"Регион: {escape(user['region'])}"
+    )
+    await message.answer(text, reply_markup=ikb.settings_menu_kb())
 
 
 @router.callback_query(F.data == "set_nickname")

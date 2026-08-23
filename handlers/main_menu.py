@@ -5,8 +5,7 @@ from aiogram.types import CallbackQuery, Message
 
 from database.db import Database
 from keyboards import inline as ikb
-from keyboards import reply as rkb
-from utils.formatting import escape, format_datetime, format_transaction, money
+from utils.formatting import escape, format_transaction_lines, money
 
 
 async def build_main_menu_content(db: Database, user_id: int):
@@ -29,13 +28,13 @@ async def build_main_menu_content(db: Database, user_id: int):
         "🏦 <b>UnitBank</b>",
         "",
         f"Счёт: «{escape(active_account['account_name'])}» (№{active_account['account_number']})",
-        f"Баланс: <b>{money(active_account['balance'])}</b>",
+        f"Баланс: <code>{money(active_account['balance'])}</code>",
         "",
         "<b>Последние операции:</b>",
     ]
     if last_tx:
         for tx in last_tx:
-            lines.append(f"• {format_datetime(tx['created_at'])} — {format_transaction(tx)}")
+            lines.extend(format_transaction_lines(tx, active_account["account_id"]))
     else:
         lines.append("— операций пока нет —")
 
@@ -44,9 +43,7 @@ async def build_main_menu_content(db: Database, user_id: int):
     return text, kb
 
 
-async def send_main_menu(
-    message: Message, db: Database, restore_reply_kb: bool = True, user_id: int | None = None
-) -> None:
+async def send_main_menu(message: Message, db: Database, user_id: int | None = None) -> None:
     """
     ВАЖНО: `message.from_user` — это отправитель сообщения. Если `message` — это
     `callback.message` (сообщение, отправленное самим ботом при обработке
@@ -54,8 +51,6 @@ async def send_main_menu(
     человеком! В таких случаях обязательно передавайте `user_id=callback.from_user.id`.
     """
     uid = user_id if user_id is not None else message.from_user.id
-    if restore_reply_kb:
-        await message.answer("🏦 Главное меню UnitBank", reply_markup=rkb.main_menu_kb())
     text, kb = await build_main_menu_content(db, uid)
     await message.answer(text, reply_markup=kb)
 

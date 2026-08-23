@@ -9,6 +9,7 @@ import config
 from database.db import Database, NicknameTakenError
 from handlers.main_menu import send_main_menu
 from keyboards import inline as ikb
+from keyboards import reply as rkb
 from states.states import Registration
 from utils.formatting import escape
 from utils.validators import ValidationError, validate_account_name, validate_nickname
@@ -29,9 +30,7 @@ async def cmd_start(
             await state.update_data(pending_payment_token=payload[4:])
         await state.set_state(Registration.nickname)
         await message.answer(
-            "👋 Добро пожаловать в <b>UnitBank</b>!\n\n"
-            "Чтобы пользоваться банком, нужно зарегистрироваться.\n"
-            "Придумайте и отправьте <b>никнейм</b> (2–32 символа):",
+            "Перед использованием бота, зарегистрируйтесь.\nВведите ваш никнейм:",
             reply_markup=ReplyKeyboardRemove(),
         )
         return
@@ -80,9 +79,7 @@ async def reg_region(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(region=region)
     await state.set_state(Registration.account_name)
     await callback.message.edit_text(f"Регион выбран: <b>{escape(region)}</b>")
-    await callback.message.answer(
-        "Придумайте название для вашего первого счёта (например, «Основной»):"
-    )
+    await callback.message.answer("Придумайте название для вашего первого счёта:")
     await callback.answer()
 
 
@@ -108,7 +105,7 @@ async def reg_account_name(message: Message, state: FSMContext, db: Database) ->
         return
 
     try:
-        account = await db.create_user_with_first_account(
+        await db.create_user_with_first_account(
             message.from_user.id, nickname, region, account_name
         )
     except NicknameTakenError as e:
@@ -117,12 +114,7 @@ async def reg_account_name(message: Message, state: FSMContext, db: Database) ->
         return
     await state.clear()
 
-    await message.answer(
-        "✅ Регистрация завершена!\n\n"
-        f"Никнейм: <b>{escape(nickname)}</b>\n"
-        f"Регион: <b>{escape(region)}</b>\n"
-        f"Счёт: «{escape(account['account_name'])}» (№{account['account_number']})"
-    )
+    await message.answer("✅ Регистрация завершена!", reply_markup=rkb.main_menu_kb())
 
     if pending_token:
         from handlers.transfer import start_payment_link_flow

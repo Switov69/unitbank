@@ -9,8 +9,9 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 import config
 from database.db import AccountLimitReachedError, Database, LastAccountDeletionError
-from handlers.main_menu import edit_main_menu, edit_main_menu_by_id
+from handlers.main_menu import edit_main_menu, edit_main_menu_by_id, send_main_menu
 from keyboards import inline as ikb
+from keyboards import reply as rkb
 from states.states import AccountCreate, AccountRename
 from utils.formatting import escape, money
 from utils.validators import ValidationError, validate_account_name
@@ -25,17 +26,35 @@ def _cancel_kb(callback_data: str = "new_account_cancel") -> InlineKeyboardMarku
     return kb.as_markup()
 
 
-# --------------------------------------------------------------------------- #
-#  Переключение счетов
-# --------------------------------------------------------------------------- #
-@router.callback_query(F.data.startswith("switch:"))
-async def switch_account(callback: CallbackQuery, db: Database) -> None:
-    account_id = int(callback.data.split(":", 1)[1])
-    account = await db.get_account(account_id)
-    if account is None or account["user_id"] != callback.from_user.id:
-        await callback.answer("Счёт не найден.", show_alert=True)
+async def _try_delete(bot, chat_id: int, message_id: int | None) -> None:
+    if not message_id:
         return
-    await db.set_active_account(callback.from_user.id, account_id)
+    try:
+        await bot.delete_message(chat_id, message_id)
+    except Exception:  # noqa: BLE001 - сообщение уже могло быть удалено/устареть
+        pass
+
+
+# --------------------------------------------------------------------------- #
+#  Переключение счетов (◀ / ▶)
+# --------------------------------------------------------------------------- #
+@router.callback_query(F.data.in_({"switch_prev", "switch_next"}))
+async def switch_account(callback: CallbackQuery, db: Database) -> None:
+    accounts = await db.get_accounts(callback.from_user.id)
+    if len(accounts) <= 1:
+        await callback.answer()
+        return
+
+    user = await db.get_user(callback.from_user.id)
+    ids = [a["account_id"] for a in accounts]
+    try:
+        idx = ids.index(user["active_account_id"])
+    except ValueError:
+        idx = 0
+
+    direction = -1 if callback.data == "switch_prev" else 1
+    new_idx = (idx + direction) % len(ids)
+    await db.set_active_account(callback.from_user.id, ids[new_idx])
     await edit_main_menu(callback, db)
     await callback.answer()
 
@@ -45,6 +64,23 @@ async def back_to_menu(callback: CallbackQuery, db: Database, state: FSMContext)
     await state.clear()
     await edit_main_menu(callback, db)
     await callback.answer()
+
+
+# --------------------------------------------------------------------------- #
+#  Мои счета
+# --------------------------------------------------------------------------- #
+@router.message(StateFilter(None), F.text == rkb.BTN_MY_ACCOUNTS)
+async def my_accounts(message: Message, db: Database) -> None:
+    user = await db.get_user(message.from_user.id)
+    accounts = await db.get_accounts(message.from_user.id)
+
+    lines = ["🗂 <b>Мои счета</b>", ""]
+    for a in accounts:
+        marker = "➡️ " if a["account_id"] == user["active_account_id"] else ""
+        lines.append(
+            f"{marker}«{escape(a['account_name'])}» (№{a['account_number']}) — <code>{money(a['balance'])}</code>"
+        )
+    await message.answer("\n".join(lines))
 
 
 # --------------------------------------------------------------------------- #
@@ -60,7 +96,7 @@ async def new_account_start(callback: CallbackQuery, db: Database, state: FSMCon
     await state.set_state(AccountCreate.name)
     await state.update_data(menu_chat_id=callback.message.chat.id, menu_message_id=callback.message.message_id)
     await callback.message.edit_text(
-        "✏️ Введите название нового счёта:",
+        "Введите название нового счёта:",
         reply_markup=_cancel_kb("new_account_cancel"),
     )
     await callback.answer()
@@ -105,15 +141,15 @@ async def new_account_confirm(callback: CallbackQuery, db: Database, state: FSMC
     try:
         await db.create_account(callback.from_user.id, name)
     except AccountLimitReachedError as e:
-        await callback.message.edit_text(str(e))
-        if menu_chat_id and menu_message_id:
-            await edit_main_menu_by_id(callback.bot, menu_chat_id, menu_message_id, db, callback.from_user.id)
-        await callback.answer()
+        await callback.answer(str(e), show_alert=True)
         return
 
-    await callback.message.edit_text("✅ Счёт создан.")
-    if menu_chat_id and menu_message_id:
-        await edit_main_menu_by_id(callback.bot, menu_chat_id, menu_message_id, db, callback.from_user.id)
+    chat_id = callback.message.chat.id
+    await _try_delete(callback.bot, chat_id, callback.message.message_id)
+    await _try_delete(callback.bot, menu_chat_id, menu_message_id)
+
+    await callback.bot.send_message(chat_id, "✅ Счёт создан.")
+    await send_main_menu(callback.message, db, user_id=callback.from_user.id)
     await callback.answer()
 
 
@@ -123,9 +159,13 @@ async def new_account_deny(callback: CallbackQuery, db: Database, state: FSMCont
     menu_chat_id = data.get("menu_chat_id")
     menu_message_id = data.get("menu_message_id")
     await state.clear()
-    await callback.message.edit_text("Создание счёта отменено.")
-    if menu_chat_id and menu_message_id:
-        await edit_main_menu_by_id(callback.bot, menu_chat_id, menu_message_id, db, callback.from_user.id)
+
+    chat_id = callback.message.chat.id
+    await _try_delete(callback.bot, chat_id, callback.message.message_id)
+    await _try_delete(callback.bot, menu_chat_id, menu_message_id)
+
+    await callback.bot.send_message(chat_id, "Создание счёта отменено.")
+    await send_main_menu(callback.message, db, user_id=callback.from_user.id)
     await callback.answer()
 
 
@@ -139,8 +179,10 @@ async def account_settings_open(callback: CallbackQuery, db: Database) -> None:
     active = next((a for a in accounts if a["account_id"] == user["active_account_id"]), accounts[0])
 
     text = (
-        f"⚙️ Настройки счёта «{escape(active['account_name'])}» (№{active['account_number']})\n\n"
-        "Что вы хотите сделать?"
+        "⚙️ <b>Настройки счёта</b>\n\n"
+        f"Название: {escape(active['account_name'])}\n"
+        f"Номер: №{active['account_number']}\n"
+        f"Баланс: {money(active['balance'])}"
     )
     await callback.message.edit_text(text, reply_markup=ikb.account_settings_kb(can_delete=len(accounts) > 1))
     await callback.answer()
@@ -156,7 +198,7 @@ async def rename_account_start(callback: CallbackQuery, db: Database, state: FSM
         rename_account_id=user["active_account_id"],
     )
     await callback.message.edit_text(
-        "✏️ Введите новое название счёта:", reply_markup=_cancel_kb("rename_cancel")
+        "Введите новое название счёта:", reply_markup=_cancel_kb("rename_cancel")
     )
     await callback.answer()
 

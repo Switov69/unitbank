@@ -10,8 +10,7 @@ from aiogram.types import CallbackQuery, Message
 
 import config
 from database.db import AccountNotFoundError, Database, InsufficientFundsError
-from handlers.common import cancel_flow, is_cancel_text, match_reply_account
-from handlers.main_menu import send_main_menu
+from handlers.common import cancel_flow, finish_flow, is_cancel_text, match_reply_account
 from keyboards import inline as ikb
 from keyboards import reply as rkb
 from states.states import WithdrawStates
@@ -99,13 +98,11 @@ async def withdraw_confirm(callback: CallbackQuery, db: Database, state: FSMCont
     try:
         await db.debit_account(data["account_id"], amount, "withdraw", "Снятие средств")
     except InsufficientFundsError as e:
-        await callback.message.edit_text(f"❌ {e}")
-        await send_main_menu(callback.message, db, user_id=callback.from_user.id)
+        await finish_flow(callback, db, f"❌ {e}")
         await callback.answer()
         return
     except AccountNotFoundError as e:
-        await callback.message.edit_text(f"❌ {e}")
-        await send_main_menu(callback.message, db, user_id=callback.from_user.id)
+        await finish_flow(callback, db, f"❌ {e}")
         await callback.answer()
         return
 
@@ -118,12 +115,13 @@ async def withdraw_confirm(callback: CallbackQuery, db: Database, state: FSMCont
         amount,
     )
 
-    await callback.message.edit_text(
+    await finish_flow(
+        callback,
+        db,
         f"✅ Заявка на снятие {money(amount)} принята.\n\n"
         "Ожидайте уведомления в течение суток — после одобрения средства можно "
-        "будет забрать в банке вашего региона."
+        "будет забрать в банке вашего региона.",
     )
-    await send_main_menu(callback.message, db, user_id=callback.from_user.id)
     await callback.answer()
 
     try:
@@ -143,8 +141,7 @@ async def withdraw_confirm(callback: CallbackQuery, db: Database, state: FSMCont
 @router.callback_query(StateFilter(WithdrawStates.confirming), F.data == "withdraw_cancel")
 async def withdraw_cancel(callback: CallbackQuery, db: Database, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.edit_text("Снятие средств отменено.")
-    await send_main_menu(callback.message, db, user_id=callback.from_user.id)
+    await finish_flow(callback, db, "Снятие средств отменено.")
     await callback.answer()
 
 

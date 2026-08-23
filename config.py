@@ -28,7 +28,7 @@ ADMIN_ID: int = int(os.getenv("ADMIN_ID", "8933598292"))
 
 # --- Название банка и валюта ---
 BANK_NAME: str = "UnitBank"
-CURRENCY: str = "Ары"
+CURRENCY: str = "𝐀𝐩"
 
 # --- Регионы, доступные при регистрации ---
 REGIONS: list[str] = ["ERD", "Капиталия", "Арда"]

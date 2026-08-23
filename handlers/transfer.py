@@ -14,7 +14,7 @@ from database.db import (
     Database,
     InsufficientFundsError,
 )
-from handlers.common import cancel_flow, is_cancel_text, match_reply_account
+from handlers.common import cancel_flow, finish_flow, is_cancel_text, match_reply_account
 from handlers.main_menu import send_main_menu
 from keyboards import inline as ikb
 from keyboards import reply as rkb
@@ -66,7 +66,7 @@ async def transfer_choose_account(message: Message, db: Database, state: FSMCont
     )
     await state.set_state(TransferStates.entering_recipient)
     await message.answer(
-        "Введите номер (4 цифры) или название счёта получателя:",
+        "Введите номер или название счёта получателя:",
         reply_markup=rkb.cancel_kb(),
     )
 
@@ -146,19 +146,15 @@ async def transfer_confirm(callback: CallbackQuery, db: Database, state: FSMCont
     try:
         await db.transfer_funds(data["from_account_id"], data["to_account_id"], amount)
     except InsufficientFundsError as e:
-        await callback.message.edit_text(f"❌ {e}")
-        await send_main_menu(callback.message, db, user_id=callback.from_user.id)
+        await finish_flow(callback, db, f"❌ {e}")
         await callback.answer()
         return
     except (AccountNotFoundError, BankError) as e:
-        await callback.message.edit_text(f"❌ {e}")
-        await send_main_menu(callback.message, db, user_id=callback.from_user.id)
+        await finish_flow(callback, db, f"❌ {e}")
         await callback.answer()
         return
 
-    await callback.message.edit_text(
-        f"✅ Перевод на сумму {money(amount)} выполнен успешно."
-    )
+    await finish_flow(callback, db, f"✅ Перевод на сумму {money(amount)} выполнен успешно.")
 
     # Уведомляем получателя, если это другой пользователь
     to_user_id = data.get("to_user_id")
@@ -173,15 +169,13 @@ async def transfer_confirm(callback: CallbackQuery, db: Database, state: FSMCont
         except Exception as exc:  # noqa: BLE001
             logger.warning("Не удалось уведомить получателя %s: %s", to_user_id, exc)
 
-    await send_main_menu(callback.message, db, user_id=callback.from_user.id)
     await callback.answer()
 
 
 @router.callback_query(StateFilter(TransferStates.confirming), F.data == "transfer_cancel")
 async def transfer_cancel(callback: CallbackQuery, db: Database, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.edit_text("Перевод отменён.")
-    await send_main_menu(callback.message, db, user_id=callback.from_user.id)
+    await finish_flow(callback, db, "Перевод отменён.")
     await callback.answer()
 
 
@@ -262,22 +256,22 @@ async def link_create_confirm(callback: CallbackQuery, db: Database, state: FSMC
     me = await callback.bot.get_me()
     link_url = f"https://t.me/{me.username}?start=pay_{token}"
 
-    await callback.message.edit_text(
+    await finish_flow(
+        callback,
+        db,
         "✅ Ссылка создана!\n\n"
         f"Сумма к получению: <b>{money(amount)}</b>\n"
         f"Счёт зачисления: «{escape(data['link_account_name'])}» (№{data['link_account_number']})\n"
         "⏳ Действительна 14 дней.\n\n"
-        f"Отправьте эту ссылку тому, от кого хотите получить средства:\n{link_url}"
+        f"Отправьте эту ссылку тому, от кого хотите получить средства:\n{link_url}",
     )
-    await send_main_menu(callback.message, db, user_id=callback.from_user.id)
     await callback.answer()
 
 
 @router.callback_query(StateFilter(LinkCreateStates.confirming), F.data == "link_create_cancel")
 async def link_create_cancel(callback: CallbackQuery, db: Database, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.edit_text("Создание ссылки отменено.")
-    await send_main_menu(callback.message, db, user_id=callback.from_user.id)
+    await finish_flow(callback, db, "Создание ссылки отменено.")
     await callback.answer()
 
 
@@ -314,7 +308,7 @@ async def start_payment_link_flow(message: Message, db: Database, state: FSMCont
 async def link_pay_confirm(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(LinkPayStates.entering_account_number)
     await callback.message.edit_text(
-        "Введите <b>номер</b> вашего счёта (4 цифры), с которого хотите отправить средства:"
+        "Введите номер или название своего счёта, с которого хотите отправить средства:"
     )
     await callback.answer()
 
@@ -330,9 +324,6 @@ async def link_pay_cancel(callback: CallbackQuery, db: Database, state: FSMConte
 @router.message(StateFilter(LinkPayStates.entering_account_number), F.text)
 async def link_pay_enter_account(message: Message, db: Database, state: FSMContext) -> None:
     text = message.text.strip()
-    if not (text.isdigit() and len(text) == 4):
-        await message.answer("Введите номер счёта в виде 4 цифр, например: 1234")
-        return
 
     data = await state.get_data()
     token = data.get("link_token")
@@ -351,9 +342,14 @@ async def link_pay_enter_account(message: Message, db: Database, state: FSMConte
         await send_main_menu(message, db)
         return
 
-    account = await db.get_account_by_number(text)
-    if account is None or account["user_id"] != message.from_user.id:
-        await message.answer("Это не ваш счёт. Проверьте номер и попробуйте снова:")
+    try:
+        account = await db.resolve_account_by_identifier(text)
+    except (AccountNotFoundError, AmbiguousAccountError) as e:
+        await message.answer(str(e))
+        return
+
+    if account["user_id"] != message.from_user.id:
+        await message.answer("Это не ваш счёт. Попробуйте снова:")
         return
 
     try:
