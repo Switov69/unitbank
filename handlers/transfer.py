@@ -13,8 +13,18 @@ from database.db import (
     BankError,
     Database,
     InsufficientFundsError,
+    PaymentLinkExpiredError,
+    PaymentLinkNotFoundError,
+    PaymentLinkUsedError,
 )
-from handlers.common import cancel_flow, finish_flow, is_cancel_text, match_reply_account
+from handlers.common import (
+    cancel_flow,
+    cancel_inline_kb as _cancel_kb,
+    finish_flow,
+    is_cancel_text,
+    match_reply_account,
+    try_delete_message as _try_delete_msg,
+)
 from handlers.main_menu import send_main_menu
 from keyboards import inline as ikb
 from keyboards import reply as rkb
@@ -284,6 +294,10 @@ async def start_payment_link_flow(message: Message, db: Database, state: FSMCont
         await message.answer("⚠️ Эта ссылка недействительна.")
         await send_main_menu(message, db)
         return
+    if link["is_used"]:
+        await message.answer("⚠️ Эта ссылка уже была использована.")
+        await send_main_menu(message, db)
+        return
 
     from datetime import datetime, timezone
 
@@ -305,10 +319,44 @@ async def start_payment_link_flow(message: Message, db: Database, state: FSMCont
 
 
 @router.callback_query(StateFilter(LinkPayStates.confirming), F.data == "link_pay_confirm")
-async def link_pay_confirm(callback: CallbackQuery, state: FSMContext) -> None:
+async def link_pay_confirm(callback: CallbackQuery, db: Database, state: FSMContext) -> None:
+    data = await state.get_data()
+    token = data.get("link_token")
+
+    link = await db.get_payment_link(token)
+    if link is None or link["is_used"]:
+        await state.clear()
+        text = "⚠️ Эта ссылка уже была использована." if link and link["is_used"] else "⚠️ Эта ссылка недействительна."
+        await finish_flow(callback, db, text)
+        await callback.answer()
+        return
+
+    from datetime import datetime, timezone
+
+    if link["expires_at"] < datetime.now(timezone.utc):
+        await state.clear()
+        await finish_flow(callback, db, "⚠️ Срок действия этой ссылки истёк.")
+        await callback.answer()
+        return
+
+    payer_accounts = await db.get_accounts(callback.from_user.id)
+
     await state.set_state(LinkPayStates.entering_account_number)
+    await state.update_data(
+        link_pay_inline_chat_id=callback.message.chat.id,
+        link_pay_inline_message_id=callback.message.message_id,
+    )
     await callback.message.edit_text(
-        "Введите номер или название своего счёта, с которого хотите отправить средства:"
+        "Введите номер или название своего счёта, с которого хотите отправить средства:",
+        reply_markup=_cancel_kb("link_pay_account_cancel"),
+    )
+    prompt = await callback.message.answer(
+        "Можно выбрать счёт на клавиатуре ниже 👇",
+        reply_markup=rkb.accounts_choice_kb(payer_accounts),
+    )
+    await state.update_data(
+        link_pay_prompt_chat_id=prompt.chat.id,
+        link_pay_prompt_message_id=prompt.message_id,
     )
     await callback.answer()
 
@@ -316,55 +364,76 @@ async def link_pay_confirm(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(StateFilter(LinkPayStates.confirming), F.data == "link_pay_cancel")
 async def link_pay_cancel(callback: CallbackQuery, db: Database, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.edit_text("Оплата по ссылке отменена.")
-    await send_main_menu(callback.message, db, user_id=callback.from_user.id)
+    await finish_flow(callback, db, "Оплата по ссылке отменена.")
+    await callback.answer()
+
+
+@router.callback_query(StateFilter(LinkPayStates.entering_account_number), F.data == "link_pay_account_cancel")
+async def link_pay_account_cancel(callback: CallbackQuery, db: Database, state: FSMContext) -> None:
+    data = await state.get_data()
+    await state.clear()
+    await _try_delete_msg(
+        callback.bot, data.get("link_pay_prompt_chat_id"), data.get("link_pay_prompt_message_id")
+    )
+    await finish_flow(callback, db, "Оплата по ссылке отменена.")
     await callback.answer()
 
 
 @router.message(StateFilter(LinkPayStates.entering_account_number), F.text)
 async def link_pay_enter_account(message: Message, db: Database, state: FSMContext) -> None:
-    text = message.text.strip()
-
     data = await state.get_data()
+    prompt_chat_id = data.get("link_pay_prompt_chat_id")
+    prompt_message_id = data.get("link_pay_prompt_message_id")
+    inline_chat_id = data.get("link_pay_inline_chat_id")
+    inline_message_id = data.get("link_pay_inline_message_id")
+
+    if is_cancel_text(message.text):
+        await _try_delete_msg(message.bot, prompt_chat_id, prompt_message_id)
+        await _try_delete_msg(message.bot, inline_chat_id, inline_message_id)
+        await cancel_flow(message, db, state, "Оплата по ссылке отменена.")
+        return
+
     token = data.get("link_token")
-    link = await db.get_payment_link(token)
-    if link is None:
-        await state.clear()
-        await message.answer("⚠️ Эта ссылка больше недействительна.")
-        await send_main_menu(message, db)
-        return
 
-    from datetime import datetime, timezone
-
-    if link["expires_at"] < datetime.now(timezone.utc):
-        await state.clear()
-        await message.answer("⚠️ Срок действия этой ссылки истёк.")
-        await send_main_menu(message, db)
-        return
-
-    try:
-        account = await db.resolve_account_by_identifier(text)
-    except (AccountNotFoundError, AmbiguousAccountError) as e:
-        await message.answer(str(e))
-        return
-
-    if account["user_id"] != message.from_user.id:
-        await message.answer("Это не ваш счёт. Попробуйте снова:")
-        return
+    # Сначала пробуем распознать нажатие кнопки реплай-клавиатуры (с точной
+    # сверкой владельца по номеру счёта), затем — свободный ввод номера/названия.
+    account = await match_reply_account(message.text, message.from_user.id, db)
+    if account is None:
+        try:
+            account = await db.resolve_account_by_identifier(message.text)
+        except (AccountNotFoundError, AmbiguousAccountError) as e:
+            await message.answer(str(e))
+            return
+        if account["user_id"] != message.from_user.id:
+            await message.answer("Это не ваш счёт. Попробуйте снова:")
+            return
 
     try:
-        await db.transfer_funds(account["account_id"], link["account_id"], link["amount"])
+        link = await db.redeem_payment_link(token, account["account_id"])
+    except (PaymentLinkNotFoundError, PaymentLinkUsedError, PaymentLinkExpiredError) as e:
+        await state.clear()
+        await _try_delete_msg(message.bot, prompt_chat_id, prompt_message_id)
+        await _try_delete_msg(message.bot, inline_chat_id, inline_message_id)
+        await message.answer(f"⚠️ {e}", reply_markup=rkb.main_menu_kb())
+        await send_main_menu(message, db)
+        return
     except InsufficientFundsError as e:
-        await message.answer(f"❌ {e} Введите номер другого своего счёта:")
+        await message.answer(f"❌ {e} Введите номер или название другого своего счёта:")
         return
     except (AccountNotFoundError, BankError) as e:
         await state.clear()
-        await message.answer(f"❌ {e}")
+        await _try_delete_msg(message.bot, prompt_chat_id, prompt_message_id)
+        await _try_delete_msg(message.bot, inline_chat_id, inline_message_id)
+        await message.answer(f"❌ {e}", reply_markup=rkb.main_menu_kb())
         await send_main_menu(message, db)
         return
 
     await state.clear()
-    await message.answer(f"✅ Перевод на сумму {money(link['amount'])} выполнен.")
+    await _try_delete_msg(message.bot, prompt_chat_id, prompt_message_id)
+    await _try_delete_msg(message.bot, inline_chat_id, inline_message_id)
+    await message.answer(
+        f"✅ Перевод на сумму {money(link['amount'])} выполнен.", reply_markup=rkb.main_menu_kb()
+    )
 
     if link["creator_user_id"] != message.from_user.id:
         try:

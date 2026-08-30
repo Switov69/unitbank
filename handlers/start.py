@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
 import config
-from database.db import Database, NicknameTakenError
+from database.db import AccountNameTakenError, Database, NicknameTakenError
 from handlers.main_menu import send_main_menu
 from keyboards import inline as ikb
 from keyboards import reply as rkb
@@ -104,6 +104,10 @@ async def reg_account_name(message: Message, state: FSMContext, db: Database) ->
         )
         return
 
+    if await db.is_account_name_taken(account_name):
+        await message.answer(f"{AccountNameTakenError()}")
+        return
+
     try:
         await db.create_user_with_first_account(
             message.from_user.id, nickname, region, account_name
@@ -111,6 +115,9 @@ async def reg_account_name(message: Message, state: FSMContext, db: Database) ->
     except NicknameTakenError as e:
         await state.set_state(Registration.nickname)
         await message.answer(f"{e} Введите другой никнейм:")
+        return
+    except AccountNameTakenError as e:
+        await message.answer(f"{e}")
         return
     await state.clear()
 

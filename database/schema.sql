@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_accounts_number ON accounts(account_number);
+-- Названия счетов уникальны глобально (без учёта регистра) — это также
+-- гарантирует, что поиск получателя перевода по названию счёта никогда не
+-- будет неоднозначным.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_name_lower ON accounts (lower(account_name));
 
 CREATE TABLE IF NOT EXISTS transactions (
     tx_id         SERIAL PRIMARY KEY,
@@ -52,9 +56,13 @@ CREATE TABLE IF NOT EXISTS payment_links (
     account_id          INTEGER NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
     creator_user_id      BIGINT NOT NULL,
     amount                 NUMERIC(18, 2) NOT NULL,
-    created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
-    expires_at                TIMESTAMPTZ NOT NULL
+    is_used                  BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at                   TIMESTAMPTZ NOT NULL
 );
+-- ALTER на случай, если таблица уже была создана прошлой версией схемы
+-- (до того, как ссылки стали одноразовыми):
+ALTER TABLE payment_links ADD COLUMN IF NOT EXISTS is_used BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS withdraw_requests (
     request_id       SERIAL PRIMARY KEY,

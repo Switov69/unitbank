@@ -52,6 +52,14 @@ class AccountLimitReachedError(BankError):
         super().__init__("Достигнут лимит счетов (максимум 4 на пользователя).")
 
 
+class AccountNameTakenError(BankError):
+    def __init__(self):
+        super().__init__(
+            "Счёт с таким названием уже существует (названия счетов уникальны "
+            "и не различаются по регистру букв). Выберите другое название."
+        )
+
+
 class NicknameTakenError(BankError):
     def __init__(self):
         super().__init__("Этот никнейм уже занят.")
@@ -66,6 +74,21 @@ class CooldownError(BankError):
     def __init__(self, remaining: timedelta):
         self.remaining = remaining
         super().__init__("Слишком рано для повторного изменения.")
+
+
+class PaymentLinkNotFoundError(BankError):
+    def __init__(self):
+        super().__init__("Эта ссылка недействительна.")
+
+
+class PaymentLinkUsedError(BankError):
+    def __init__(self):
+        super().__init__("Эта ссылка уже была использована.")
+
+
+class PaymentLinkExpiredError(BankError):
+    def __init__(self):
+        super().__init__("Срок действия этой ссылки истёк.")
 
 
 def _clean_dsn(dsn: str) -> tuple[str, str]:
@@ -236,6 +259,12 @@ class Database:
                 name,
             )
 
+    async def is_account_name_taken(self, name: str, exclude_account_id: int | None = None) -> bool:
+        """Проверка уникальности названия счёта (без учёта регистра), не считая
+        (опционально) сам переименовываемый счёт."""
+        matches = await self.find_accounts_by_name(name)
+        return any(m["account_id"] != exclude_account_id for m in matches)
+
     async def resolve_account_by_identifier(self, identifier: str) -> asyncpg.Record:
         """
         Ищет счёт получателя по номеру (4 цифры) или по названию.
@@ -270,7 +299,11 @@ class Database:
                     """,
                     number, user_id, account_name,
                 )
-            except asyncpg.UniqueViolationError:
+            except asyncpg.UniqueViolationError as exc:
+                if exc.constraint_name == "idx_accounts_name_lower":
+                    # Коллизия по названию счёта — повторять с новым номером бессмысленно
+                    raise AccountNameTakenError() from exc
+                # Иначе это коллизия по номеру счёта — пробуем сгенерировать другой
                 continue
         raise RuntimeError("Не удалось сгенерировать уникальный номер счёта")
 
@@ -290,10 +323,13 @@ class Database:
 
     async def rename_account(self, account_id: int, new_name: str) -> None:
         async with self.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE accounts SET account_name = $1 WHERE account_id = $2",
-                new_name, account_id,
-            )
+            try:
+                await conn.execute(
+                    "UPDATE accounts SET account_name = $1 WHERE account_id = $2",
+                    new_name, account_id,
+                )
+            except asyncpg.UniqueViolationError as exc:
+                raise AccountNameTakenError() from exc
 
     async def delete_account_and_move_funds(
         self, account_id: int, target_account_id: int
@@ -498,6 +534,72 @@ class Database:
             return await conn.fetchrow(
                 "SELECT * FROM payment_links WHERE token = $1", token
             )
+
+    async def redeem_payment_link(self, token: str, from_account_id: int) -> asyncpg.Record:
+        """
+        Атомарно проверяет и погашает ссылку на получение средств:
+        блокирует строку ссылки, проверяет что она не использована и не
+        просрочена, выполняет перевод со счёта `from_account_id` на счёт
+        ссылки и сразу же помечает ссылку использованной — всё в одной
+        транзакции, поэтому ссылку невозможно погасить дважды даже при
+        одновременных попытках (в т.ч. с разных счетов/пользователей).
+        Возвращает исходную запись ссылки (с суммой и создателем).
+        """
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                link = await conn.fetchrow(
+                    "SELECT * FROM payment_links WHERE token = $1 FOR UPDATE", token
+                )
+                if link is None:
+                    raise PaymentLinkNotFoundError()
+                if link["is_used"]:
+                    raise PaymentLinkUsedError()
+                if link["expires_at"] < datetime.now(timezone.utc):
+                    raise PaymentLinkExpiredError()
+
+                to_account_id = link["account_id"]
+                if from_account_id == to_account_id:
+                    raise BankError("Нельзя оплатить ссылку со счёта, на который она зачисляет средства.")
+
+                first, second = sorted([from_account_id, to_account_id])
+                await conn.execute("SELECT 1 FROM accounts WHERE account_id = $1 FOR UPDATE", first)
+                await conn.execute("SELECT 1 FROM accounts WHERE account_id = $1 FOR UPDATE", second)
+
+                sender = await conn.fetchrow(
+                    "SELECT * FROM accounts WHERE account_id = $1", from_account_id
+                )
+                receiver = await conn.fetchrow(
+                    "SELECT * FROM accounts WHERE account_id = $1", to_account_id
+                )
+                if sender is None or receiver is None:
+                    raise AccountNotFoundError()
+                if sender["balance"] < link["amount"]:
+                    raise InsufficientFundsError()
+
+                await conn.execute(
+                    "UPDATE accounts SET balance = balance - $1 WHERE account_id = $2",
+                    link["amount"], from_account_id,
+                )
+                await conn.execute(
+                    "UPDATE accounts SET balance = balance + $1 WHERE account_id = $2",
+                    link["amount"], to_account_id,
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO transactions
+                        (from_account, to_account, from_number, from_name,
+                         to_number, to_name, amount, tx_type)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, 'transfer')
+                    """,
+                    from_account_id, to_account_id,
+                    sender["account_number"], sender["account_name"],
+                    receiver["account_number"], receiver["account_name"],
+                    link["amount"],
+                )
+                await conn.execute(
+                    "UPDATE payment_links SET is_used = TRUE WHERE token = $1", token
+                )
+                return link
 
     async def delete_expired_payment_links(self) -> int:
         async with self.pool.acquire() as conn:

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.enums import ButtonStyle
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import CallbackQuery, Message
 
 import config
-from database.db import AccountLimitReachedError, Database, LastAccountDeletionError
+from database.db import AccountLimitReachedError, AccountNameTakenError, Database, LastAccountDeletionError
+from handlers.common import cancel_inline_kb as _cancel_kb, try_delete_message as _try_delete
 from handlers.main_menu import edit_main_menu, edit_main_menu_by_id, send_main_menu
 from keyboards import inline as ikb
 from keyboards import reply as rkb
@@ -17,22 +16,6 @@ from utils.formatting import escape, money
 from utils.validators import ValidationError, validate_account_name
 
 router = Router(name="accounts")
-
-
-def _cancel_kb(callback_data: str = "new_account_cancel") -> InlineKeyboardMarkup:
-    kb = InlineKeyboardBuilder()
-    kb.button(text="❌ Отмена", callback_data=callback_data, style=ButtonStyle.DANGER)
-    kb.adjust(1)
-    return kb.as_markup()
-
-
-async def _try_delete(bot, chat_id: int, message_id: int | None) -> None:
-    if not message_id:
-        return
-    try:
-        await bot.delete_message(chat_id, message_id)
-    except Exception:  # noqa: BLE001 - сообщение уже могло быть удалено/устареть
-        pass
 
 
 # --------------------------------------------------------------------------- #
@@ -67,20 +50,12 @@ async def back_to_menu(callback: CallbackQuery, db: Database, state: FSMContext)
 
 
 # --------------------------------------------------------------------------- #
-#  Мои счета
+#  Мои счета (то же самое, что и /start)
 # --------------------------------------------------------------------------- #
 @router.message(StateFilter(None), F.text == rkb.BTN_MY_ACCOUNTS)
-async def my_accounts(message: Message, db: Database) -> None:
-    user = await db.get_user(message.from_user.id)
-    accounts = await db.get_accounts(message.from_user.id)
-
-    lines = ["🗂 <b>Мои счета</b>", ""]
-    for a in accounts:
-        marker = "➡️ " if a["account_id"] == user["active_account_id"] else ""
-        lines.append(
-            f"{marker}«{escape(a['account_name'])}» (№{a['account_number']}) — <code>{money(a['balance'])}</code>"
-        )
-    await message.answer("\n".join(lines))
+async def my_accounts(message: Message, db: Database, state: FSMContext) -> None:
+    await state.clear()
+    await send_main_menu(message, db)
 
 
 # --------------------------------------------------------------------------- #
@@ -117,6 +92,10 @@ async def new_account_name(message: Message, db: Database, state: FSMContext) ->
         await message.answer(str(e))
         return
 
+    if await db.is_account_name_taken(name):
+        await message.answer(f"{AccountNameTakenError()}")
+        return
+
     await state.update_data(new_account_name=name)
     await message.answer(
         f"Создать новый счёт «{escape(name)}»?",
@@ -142,6 +121,14 @@ async def new_account_confirm(callback: CallbackQuery, db: Database, state: FSMC
         await db.create_account(callback.from_user.id, name)
     except AccountLimitReachedError as e:
         await callback.answer(str(e), show_alert=True)
+        return
+    except AccountNameTakenError as e:
+        await state.set_state(AccountCreate.name)
+        await state.update_data(menu_chat_id=menu_chat_id, menu_message_id=menu_message_id)
+        await callback.message.edit_text(
+            f"{e}\n\nВведите другое название счёта:", reply_markup=_cancel_kb("new_account_cancel")
+        )
+        await callback.answer()
         return
 
     chat_id = callback.message.chat.id
@@ -220,16 +207,27 @@ async def rename_account_apply(message: Message, db: Database, state: FSMContext
 
     data = await state.get_data()
     account_id = data.get("rename_account_id")
-    menu_chat_id = data.get("menu_chat_id")
-    menu_message_id = data.get("menu_message_id")
-    await state.clear()
 
     account = await db.get_account(account_id)
     if account is None or account["user_id"] != message.from_user.id:
+        await state.clear()
         await message.answer("Счёт не найден.")
         return
 
-    await db.rename_account(account_id, name)
+    if await db.is_account_name_taken(name, exclude_account_id=account_id):
+        await message.answer(f"{AccountNameTakenError()}")
+        return
+
+    menu_chat_id = data.get("menu_chat_id")
+    menu_message_id = data.get("menu_message_id")
+
+    try:
+        await db.rename_account(account_id, name)
+    except AccountNameTakenError as e:
+        await message.answer(f"{e}")
+        return
+
+    await state.clear()
     await message.answer(f"✅ Счёт переименован в «{escape(name)}».")
     if menu_chat_id and menu_message_id:
         await edit_main_menu_by_id(message.bot, menu_chat_id, menu_message_id, db, message.from_user.id)

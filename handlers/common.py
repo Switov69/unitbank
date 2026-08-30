@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import re
 
+from aiogram.enums import ButtonStyle
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.db import Database
 from handlers.main_menu import send_main_menu
@@ -12,6 +14,23 @@ from keyboards import reply as rkb
 
 def is_cancel_text(text: str | None) -> bool:
     return text is not None and text.strip() == rkb.BTN_CANCEL
+
+
+def cancel_inline_kb(callback_data: str) -> InlineKeyboardMarkup:
+    """Одна красная инлайн-кнопка «Отмена» с заданным callback_data."""
+    kb = InlineKeyboardBuilder()
+    kb.button(text="❌ Отмена", callback_data=callback_data, style=ButtonStyle.DANGER)
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+async def try_delete_message(bot, chat_id: int | None, message_id: int | None) -> None:
+    if not chat_id or not message_id:
+        return
+    try:
+        await bot.delete_message(chat_id, message_id)
+    except Exception:  # noqa: BLE001 - сообщение уже могло быть удалено/устареть
+        pass
 
 
 async def cancel_flow(message: Message, db: Database, state: FSMContext, notice: str = "Действие отменено.") -> None:
